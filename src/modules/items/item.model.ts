@@ -1,8 +1,9 @@
-import { Schema, model, Document } from 'mongoose';
+import { Schema, model, HydratedDocument } from 'mongoose';
 import { ItemInterface } from './item.types';
 
+export type ItemModel = HydratedDocument<ItemInterface>;
 
-const itemSchema = new Schema<ItemInterface>(
+const itemSchema = new Schema<ItemModel>(
   {
    
     name: { type: String, required: true },
@@ -50,6 +51,6 @@ const itemSchema = new Schema<ItemInterface>(
 
 // 🔥 GEO INDEX
 itemSchema.index({ location: '2dsphere' });
-itemSchema.index({ postId: 1 });
+// itemSchema.index({ postId: 1 });
 
-export default model<ItemInterface & Document>('Item', itemSchema);
+export default model<ItemModel>('Item', itemSchema);

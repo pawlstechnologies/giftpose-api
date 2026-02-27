@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 import ItemModel from './item.model';
 import { ItemInterface } from './item.types';
-import { ApiError } from '../../utils/ApiError';
+import ApiError from '../../utils/ApiError';
+import { PipelineStage } from 'mongoose';
 
 import LocationModel from '../location/location.mdel';
 import TrashNotingApi from '../../utils/trashnothing.api';
@@ -26,12 +27,12 @@ export default class ItemService {
     }
 
 
-    async getItemsNearLocation(deviceId: string, limit: number, offset: number) {
+    async getItemsNearLocation(deviceId: String, limit: number, offset: number) {
         //getch devie location
         const location = await LocationModel.findOne({ deviceId });
 
         if (!location) {
-            throw new ApiError(404, 'Device location not found');
+            throw new ApiError(404, 'Device not found');
         }
 
         const { lat, lng, miles } = location;
@@ -39,7 +40,7 @@ export default class ItemService {
         // Convert miles to meters
         const maxDistanceMeters = miles * 1609.34; // 1 mile = 1609.34 meters
 
-        const basePipeline = [
+        const basePipeline: PipelineStage[] = [
             {
                 $geoNear: {
                     near: { type: "Point", coordinates: [lng, lat] },

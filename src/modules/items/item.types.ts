@@ -7,6 +7,10 @@ export interface ItemInterface {
     city?: string;
     lng: number;
     lat: number;
+    location: {
+        type: "Point";
+        coordinates: [number, number]; // [lng, lat]
+    };
     postCode: string;
     partner?: string;
     isTaken: boolean;
@@ -19,7 +23,7 @@ export interface ItemInterface {
     pickup: Boolean;
     country: String;
     postId: Number;
-    expiration:Date;
+    expiration: Date;
     status: String;
-    
+
 }

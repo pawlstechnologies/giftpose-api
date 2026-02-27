@@ -22,7 +22,12 @@ export const listAlerts = async (req: Request, res: Response) => {
     res.json({ success: true, ...result });
 };
 
-export const updateAlert = async (req: Request, res: Response) => {
+interface AlertParams {
+  id: string;
+}
+
+
+export const updateAlert = async (req: Request<AlertParams>, res: Response) => {
     const { error } = updateAlertSchema.validate(req.body);
     if (error) return res.status(400).json({ success: false, message: error.message });
 
@@ -33,7 +38,7 @@ export const updateAlert = async (req: Request, res: Response) => {
     res.json({ success: true, data: alert });
 };
 
-export const deleteAlert = async (req: Request, res: Response) => {
+export const deleteAlert = async (req: Request<AlertParams>, res: Response) => {
     const deviceId = req.query.deviceId as string;
     if (!deviceId) return res.status(400).json({ success: false, message: "deviceId is required" });
 

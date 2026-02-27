@@ -1,8 +1,9 @@
-import { Schema, model, Document } from "mongoose";
-
+import { Schema, model, HydratedDocument } from "mongoose";
 import { LocationInterface } from "./location.types";
 
-const locationSchema = new Schema<LocationInterface>(
+export type LocationModel = HydratedDocument<LocationInterface>;
+
+const locationSchema = new Schema<LocationModel>(
     {
         deviceId: { type: String, required: true, unique: true, trim: true },
         postCode: { type: String, required: true, trim: true },
@@ -15,9 +16,11 @@ const locationSchema = new Schema<LocationInterface>(
     { timestamps: true }
 );
 
-const LocationModel = model<LocationInterface & Document>(
-    'Location',
-    locationSchema
-);
+export default model<LocationModel>("Location", locationSchema);
 
-export default LocationModel;
+// const LocationModel = model<LocationInterface & Document>(
+//     'Location',
+//     locationSchema
+// );
+
+// export default LocationModel;

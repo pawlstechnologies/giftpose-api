@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { LocationService } from "./location.service";
-import { ApiError } from "../../utils/ApiError";
+import  ApiError  from "../../utils/ApiError";
 
 
 export const fetchPostcodeLocation = async (req: Request, res: Response) => {

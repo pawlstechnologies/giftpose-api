@@ -8,7 +8,11 @@ const itemService = new ItemsService();
 export const createItem = async (req: Request, res: Response) => {
     try {
         const item = await itemService.createItem(req.body);
-        res.status(201).json(item);
+        res.status(201).json({
+            status: true,
+            message: 'Item created successfully',
+            data: item,
+        });
     } catch (error: any) {
         res.status(error.statusCode || 500).json({ message: error.message });
     }
@@ -18,13 +22,20 @@ export const createItem = async (req: Request, res: Response) => {
 
 export const getItemsNearMe = async (req: Request, res: Response) => {
     try {
-        const { deviceId } = req.params;
+        // const { deviceId } = req.params;
 
-        // return deviceId;
+        const rawDeviceId = req.params.deviceId;
 
-        if (!deviceId) {
+        // if (!deviceId) {
+        //     return res.status(400).json({ message: 'deviceId is required' });
+        // }
+
+        if (!rawDeviceId || Array.isArray(rawDeviceId)) {
             return res.status(400).json({ message: 'deviceId is required' });
         }
+
+        const deviceId = rawDeviceId;
+
         const page = Math.max(Number(req.query.page) || 1, 1);
         const limit = 5;
         const offset = (page - 1) * limit;
@@ -49,8 +60,12 @@ export const getItemsNearMe = async (req: Request, res: Response) => {
     }
 }
 
+interface GetItemParams {
+    deviceId: string;
+    itemId: string;
+}
 
-export const getItemById = async (req: Request, res: Response) => {
+export const getItemById = async (req: Request<GetItemParams>, res: Response) => {
     try {
         const { deviceId, itemId } = req.params;
 

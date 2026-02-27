@@ -22,7 +22,11 @@ export const listSubCategories = async (req: Request, res: Response) => {
   res.json({ success: true, ...result });
 };
 
-export const updateCategory = async (req: Request, res: Response) => {
+interface CategoryParams {
+  id: string;
+}
+
+export const updateCategory = async (req: Request<CategoryParams>, res: Response) => {
   const { error } = updateCategorySchema.validate(req.body);
   if (error) return res.status(400).json({ message: error.message });
 
@@ -30,17 +34,17 @@ export const updateCategory = async (req: Request, res: Response) => {
   res.json({ success: true, data });
 };
 
-export const updateSubCategory = async (req: Request, res: Response) => {
+export const updateSubCategory = async (req: Request<CategoryParams>, res: Response) => {
   const data = await categoryService.updateSubCategory(req.params.id, req.body);
   res.json({ success: true, data });
 };
 
-export const deleteCategory = async (req: Request, res: Response) => {
+export const deleteCategory = async (req: Request<CategoryParams>, res: Response) => {
   await categoryService.deleteCategory(req.params.id);
   res.json({ success: true, message: "Category deleted" });
 };
 
-export const deleteSubCategory = async (req: Request, res: Response) => {
+export const deleteSubCategory = async (req: Request<CategoryParams>, res: Response) => {
   await categoryService.deleteSubCategory(req.params.id);
   res.json({ success: true, message: "SubCategory deleted" });
 };
