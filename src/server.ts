@@ -15,7 +15,7 @@ const startServer = async () => {
 
         await connectDatabase();
 
-        // TrashNothingSyncService.start(); //start the cron job
+        TrashNothingSyncService.start(); //start the cron job
         app.listen(PORT, () => {
             console.log(`Server is running on http://localhost:${PORT}`);
         });
