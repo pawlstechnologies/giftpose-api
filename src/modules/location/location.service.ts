@@ -1,7 +1,7 @@
 import axios  from "axios";
 import { LocationInterface } from "./location.types";
 import LocationModel from "./location.mdel";
-import { ApiError } from '../../utils/ApiError';
+import  ApiError  from '../../utils/ApiError';
 
 import { getDistancebetweenCoordinates } from "../../utils/distance";
 
@@ -90,5 +90,5 @@ export class LocationService {
         return distance;
     }
 
-    
+
 }
