@@ -115,3 +115,22 @@ export const listTrashNotingItems = async (req: Request, res: Response, next: Ne
         });
     }
 }
+
+
+export const listAllItems = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const items = await itemService.fetchAllItems();
+
+        res.status(200).json({
+            success: true,
+            count: items.length,
+            data: items
+        });
+
+    } catch (error: any) {
+        res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.message || 'Failed to fetch items'
+        });
+    }
+};
