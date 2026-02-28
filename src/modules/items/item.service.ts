@@ -206,6 +206,16 @@ export default class ItemService {
 
     }
 
+    async fetchAllItems() {
+
+        const items = await ItemModel
+            .find()
+            .sort({ createdAt: -1 }) // optional sorting
+            .lean();
+
+        return items;
+    }
+
 
 
 
