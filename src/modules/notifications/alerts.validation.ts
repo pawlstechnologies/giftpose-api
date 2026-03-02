@@ -2,6 +2,7 @@ import Joi from "joi";
 
 export const createAlertSchema = Joi.object({
   deviceId: Joi.string().required(),
+  firebaseToken: Joi.string().required(),
   categories: Joi.array().items(Joi.string()).required(),
   keywords: Joi.array().items(Joi.string()).required(),
   status: Joi.string().valid("Active", "Inactive"),

@@ -36,8 +36,8 @@ export const getItemsNearMe = async (req: Request, res: Response) => {
 
         const deviceId = rawDeviceId;
 
-        const page = Math.max(Number(req.query.page) || 1, 1);
-        const limit = 5;
+        const page = Math.max(Number(req.query.page) || 1);
+        const limit = 10;
         const offset = (page - 1) * limit;
 
         const { items, total, userLocation } = await itemService.getItemsNearLocation(deviceId, limit, offset);

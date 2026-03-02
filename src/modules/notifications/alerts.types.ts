@@ -4,6 +4,7 @@ export type StatusType = "Active" | "Inactive";
 
 export interface IDeviceAlert extends Document {
   deviceId: string;           // link to LocationModel.deviceId
+  firebaseToken: string;  
   categories: Types.ObjectId[]; 
   keywords: string[];
   status: StatusType;
