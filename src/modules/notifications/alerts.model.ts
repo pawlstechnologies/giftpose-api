@@ -3,8 +3,8 @@ import { IDeviceAlert, StatusType } from "./alerts.types";
 
 const DeviceAlertSchema = new Schema<IDeviceAlert>(
   {
-    deviceId: { type: String, required: true, index: true }, // link to device
-    firebaseToken: { type: String, required: true, index: true }, // link to device
+    deviceId: { type: String, required: true, index: true, unique: true }, // link to device
+    firebaseToken: { type: String, required: true, index: true, unique: true }, // link to device
     categories: [{ type: Schema.Types.ObjectId, ref: "Category" }],
     keywords: [{ type: String }],
     status: { type: String, enum: ["Active", "Inactive"], default: "Active" },

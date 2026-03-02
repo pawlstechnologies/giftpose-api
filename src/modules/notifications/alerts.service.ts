@@ -1,13 +1,23 @@
 import { DeviceAlertModel } from "./alerts.model";
 import ApiError from "../../utils/ApiError";
 // import categoryModel  //= require("modules/category/category.model");
-import {SubCategoryModel, CategoryModel} from "../category/category.model" //= require("modules/category/category.model");
+import { SubCategoryModel, CategoryModel } from "../category/category.model" //= require("modules/category/category.model");
 // import { ItemModel } from "../item/item.model";
 
 class AlertService {
   async createAlert(deviceId: string, data: any) {
-    const alert = await DeviceAlertModel.create({ deviceId, ...data });
+    // const alert = await DeviceAlertModel.create({ deviceId, ...data });
+    const alert = await DeviceAlertModel.findOneAndUpdate(
+      { deviceId },
+      { $set: data },
+      {
+        upsert: true,
+        returnDocument: 'after',
+        runValidators: true
+      }
+    );
     return alert;
+
   }
 
   async listAlerts(deviceId: string, page: number, limit: number) {
@@ -62,7 +72,7 @@ class AlertService {
       subcategories
     };
   }
-  
+
 
 
   async checkItemForAlerts(item: any) {
