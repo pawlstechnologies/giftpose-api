@@ -6,7 +6,8 @@ import {
     createSubCategory,
     createContent,
     listContents,
-    listCategoriesTree
+    listCategoriesTree,
+    searchCategories
     // updateCategory,
     // updateSubCategory,
     // deleteCategory,
@@ -24,6 +25,7 @@ router.get("/subcategories", listSubCategories);
 router.post("/contents", createContent);
 router.get("/contents", listContents);
 router.get("/tree", listCategoriesTree);
+router.post("/search", searchCategories);
 
 // router.put("/:id", updateCategory);
 // router.put("/subcategory/:id", updateSubCategory);
