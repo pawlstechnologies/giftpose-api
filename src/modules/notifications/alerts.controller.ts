@@ -23,7 +23,7 @@ export const listAlerts = async (req: Request, res: Response) => {
 };
 
 interface AlertParams {
-  id: string;
+    id: string;
 }
 
 
@@ -56,17 +56,24 @@ export const getCategoriesByKeywords = async (req: Request, res: Response) => {
             });
         }
 
-        const categories = await alertService.getCategoriesByKeywords(
+        const result = await alertService.getCategoriesByKeywords(
             value.keywords
         );
 
-        res.json({
+        return res.json({
             success: true,
+            message: 'Retrieved siccessfully',
             keywords: value.keywords,
-            categoriesCount: categories.categories.length,
-            subcategoriesCount: categories.subcategories.length,
-            data: categories
+            data: result
         });
+
+        // res.json({
+        //     success: true,
+        //     keywords: value.keywords,
+        //     categoriesCount: categories.categories.length,
+        //     subcategoriesCount: categories.subcategories.length,
+        //     data: categories
+        // });
 
     } catch (err: any) {
         res.status(err.statusCode || 500).json({

@@ -59,11 +59,73 @@ export const getItemsNearMe = async (req: Request, res: Response) => {
         res.status(error.statusCode || 500).json({ message: error.message });
     }
 }
-
 interface GetItemParams {
     deviceId: string;
     itemId: string;
 }
+
+interface GetDeviceParams {
+    deviceId: string;
+}
+
+export const searchItemsNearMe = async (req: Request<GetDeviceParams>, res: Response) => {
+  try {
+    const { deviceId } = req.params;
+    const { keywords, page = 1, limit = 10 } = req.body;
+
+    if (!deviceId) return res.status(400).json({ success: false, message: "DeviceId is required" });
+
+    const offset = (page - 1) * limit;
+
+    const items = await itemService.searchItemsNearMe(deviceId, keywords, Number(limit), offset);
+
+    return res.json({
+      success: true,
+      message: "Items near you fetched successfully",
+      page: Number(page),
+      perPage: Number(limit),
+      data: items
+    });
+
+  } catch (error: any) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || "Internal server error"
+    });
+  }
+};
+
+// export const searchItemsNearMe = async (req: Request<GetDeviceParams>, res: Response) => {
+//   try {
+//     const { deviceId } = req.params;
+//     const { keywords, page = 1, limit = 10 } = req.body; // POST body
+    
+//     if (!deviceId) return res.status(400).json({ success: false, message: "DeviceId is required" });
+
+//     const offset = (page - 1) * limit;
+
+//     const result = await itemService.searchItemsNearMe(deviceId, keywords, Number(limit), offset);
+
+//     return res.json({
+//       success: true,
+//       message: "Items near you fetched successfully",
+//       page: Number(page),
+//       perPage: Number(limit),
+//       total: result.total,
+//       userLocation: result.userLocation,
+//       data: result.items
+//     });
+
+//   } catch (error: any) {
+//     return res.status(error.statusCode || 500).json({
+//       success: false,
+//       message: error.message || "Internal server error"
+//     });
+//   }
+// };
+
+
+
 
 export const getItemById = async (req: Request<GetItemParams>, res: Response) => {
     try {

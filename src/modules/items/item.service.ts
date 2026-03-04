@@ -96,6 +96,149 @@ export default class ItemService {
 
     }
 
+    // async searchItemsNearMe(deviceId: string, keywords: string[], limit: number, offset: number) {
+    //     // Get device location
+    //     const location = await LocationModel.findOne({ deviceId });
+    //     if (!location) {
+    //         throw new ApiError(404, 'Device not found');
+    //     }
+
+    //     const { lat, lng, miles } = location;
+
+    //     // Convert miles to meters
+    //     const maxDistanceMeters = miles * 1609.34;
+
+    //     // Prepare regex for keywords search
+    //     const regexArray = keywords?.map(kw => new RegExp(kw, "i")) || [];
+
+    //     // Base pipeline for geo query
+    //     const basePipeline: PipelineStage[] = [
+    //         {
+    //             $geoNear: {
+    //                 near: { type: "Point", coordinates: [lng, lat] },
+    //                 distanceField: "distanceInMeters",
+    //                 maxDistance: maxDistanceMeters,
+    //                 spherical: true,
+    //                 query: {
+    //                     isTaken: false,
+    //                     $or: [
+    //                         { name: { $in: regexArray } },
+    //                         { description: { $in: regexArray } },
+    //                         { category: { $in: regexArray } },
+    //                         { subCategory: { $in: regexArray } },
+    //                     ]
+    //                 }
+    //             }
+    //         },
+    //         { $sort: { distanceInMeters: 1 } },
+    //         {
+    //             $addFields: {
+    //                 distanceInMiles: { $divide: ["$distanceInMeters", 1609.34] }
+    //             }
+    //         }
+    //     ];
+
+    //     // Paginated results
+    //     const items = await ItemModel.aggregate([
+    //         ...basePipeline,
+    //         { $skip: offset },
+    //         { $limit: limit }
+    //     ]);
+
+    //     // Total count without skip/limit
+    //     const totalResult = await ItemModel.aggregate([
+    //         ...basePipeline,
+    //         { $count: "total" }
+    //     ]);
+    //     const total = totalResult[0]?.total || 0;
+
+    //     return {
+    //         userLocation: {
+    //             deviceId: location.deviceId,
+    //             postcode: location.postCode,
+    //             city: location.city,
+    //             setMile: location.miles
+    //         },
+    //         items: items.map(item => ({
+    //             _id: item._id,
+    //             name: item.name,
+    //             description: item.description,
+    //             category: item.category,
+    //             subCategory: item.subCategory,
+    //             partner: item.partner || "Unknown",
+    //             thumbnail: item.imageUrls?.[0] || item.thumbnail || null,
+    //             visitCount: item.visitCount ?? 0,
+    //             distanceInMeters: item.distanceInMeters ?? 0,
+    //             distanceInMiles: item.distanceInMiles ?? 0
+    //         })),
+    //         total
+    //     };
+    // }
+
+    async searchItemsNearMe(deviceId: string, keywords: string[], limit: number, offset: number) {
+        // 1️⃣ Get device location
+        const location = await LocationModel.findOne({ deviceId });
+        if (!location) throw new ApiError(404, 'Device not found');
+
+        const { lat, lng, miles } = location;
+        const maxDistanceMeters = miles * 1609.34;
+
+        // 2️⃣ Prepare regex array for keywords
+        const regexArray = keywords?.map(kw => new RegExp(kw, "i")) || [];
+
+        // 3️⃣ Geo + keyword pipeline
+        const pipeline: PipelineStage[] = [
+            {
+                $geoNear: {
+                    near: { type: "Point", coordinates: [lng, lat] },
+                    distanceField: "distanceInMeters",
+                    maxDistance: maxDistanceMeters,
+                    spherical: true,
+                    query: {
+                        isTaken: false,
+                        $or: [
+                            { name: { $in: regexArray } },
+                            { description: { $in: regexArray } },
+                            { category: { $in: regexArray } },
+                            { subCategory: { $in: regexArray } }
+                        ]
+                    }
+                }
+            },
+            { $sort: { distanceInMeters: 1 } },
+            {
+                $addFields: {
+                    distanceInMiles: { $divide: ["$distanceInMeters", 1609.34] }
+                }
+            },
+            { $skip: offset },
+            { $limit: limit }
+        ];
+
+        const items = await ItemModel.aggregate(pipeline);
+        return {
+            userLocation: {
+                deviceId: location.deviceId,
+                postcode: location.postCode,
+                city: location.city,
+                setMile: location.miles
+            },
+            items: items.map(item => ({
+                _id: item._id,
+                name: item.name,
+                description: item.description,
+                category: item.category,
+                subCategory: item.subCategory,
+                partner: item.partner || "Unknown",
+                thumbnail: item.imageUrls?.[0] || item.thumbnail || null,
+                visitCount: item.visitCount ?? 0,
+                distanceInMeters: item.distanceInMeters ?? 0,
+                distanceInMiles: item.distanceInMiles ?? 0
+            })),
+
+        }
+    }
+
 
     private formatToSecond(date: Date): string {
         return date.toISOString().split('.')[0];
