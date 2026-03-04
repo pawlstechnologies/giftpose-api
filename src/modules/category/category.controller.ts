@@ -80,6 +80,26 @@ export const listCategoriesTree = async (req: Request, res: Response) => {
 
 };
 
+export const searchCategories = async (req: Request, res: Response) =>{
+  try {
+    const { keywords } = req.body;
+
+    const result = await categoryService.searchCategories(keywords);
+
+    return res.json({
+      success: true,
+      total: result.length,
+      data: result
+    });
+
+  } catch (error: any) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 
 
 

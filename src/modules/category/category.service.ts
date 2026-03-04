@@ -66,43 +66,66 @@ class CategoryService {
 
   ///giant tree
 
-  async listCategoryTree(categoryId: string){
+  async listCategoryTree(categoryId: string) {
     const result = await CategoryModel.aggregate([
-    {
-      $match: {
-        _id: new mongoose.Types.ObjectId(categoryId),
-        status: { $ne: "Deleted" }
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(categoryId),
+          status: { $ne: "Deleted" }
+        }
+      },
+      {
+        $lookup: {
+          from: "subcategories",
+          localField: "_id",
+          foreignField: "categoryId",
+          as: "subcategories"
+        }
+      },
+      { $unwind: { path: "$subcategories", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "contents",
+          localField: "subcategories._id",
+          foreignField: "subcategoryId",
+          as: "subcategories.contents"
+        }
+      },
+      {
+        $group: {
+          _id: "$_id",
+          name: { $first: "$name" },
+          status: { $first: "$status" },
+          subcategories: { $push: "$subcategories" }
+        }
       }
-    },
-    {
-      $lookup: {
-        from: "subcategories",
-        localField: "_id",
-        foreignField: "categoryId",
-        as: "subcategories"
-      }
-    },
-    { $unwind: { path: "$subcategories", preserveNullAndEmptyArrays: true } },
-    {
-      $lookup: {
-        from: "contents",
-        localField: "subcategories._id",
-        foreignField: "subcategoryId",
-        as: "subcategories.contents"
-      }
-    },
-    {
-      $group: {
-        _id: "$_id",
-        name: { $first: "$name" },
-        status: { $first: "$status" },
-        subcategories: { $push: "$subcategories" }
-      }
-    }
-  ]);
+    ]);
 
-  return result[0];
+    return result[0];
   }
+
+  async searchCategories(keywords: string[]) {
+    if (!keywords || keywords.length === 0) {
+      throw new ApiError(400, "Keywords are required");
+    }
+
+    const regexArray = keywords.map(
+      (kw) => new RegExp(kw, "i")
+    );
+
+    const categories = await CategoryModel.find({
+      status: { $ne: "Deleted" },
+      $or: [
+        { name: { $in: regexArray } },
+        { slug: { $in: regexArray } } // remove if you don't use slug
+      ]
+    })
+      .sort({ name: 1 })
+      .select("name slug status"); // clean response
+
+    return categories;
+  }
+
 
 
 
