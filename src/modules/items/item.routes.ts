@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { createItem, getItemsNearMe, listTrashNotingItems, getItemById, listAllItems } from './item.controller';
+import { createItem, getItemsNearMe, listTrashNotingItems, getItemById, listAllItems, searchItemsNearMe } from './item.controller';
 
 const router = Router();
 
@@ -9,5 +9,6 @@ router.get('/nearby/:deviceId', getItemsNearMe);
 router.get('/trash', listTrashNotingItems);
 router.get("/:deviceId/:itemId", getItemById);
 router.get("/list", listAllItems); //mirror the items table
+router.post("/:deviceId/search", searchItemsNearMe);
 
 export default router;

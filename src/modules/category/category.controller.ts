@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
 import categoryService from "./category.service";
-import { createCategorySchema, updateCategorySchema, paginationSchema } from "./category.validation";
+import { createCategoryValidator, createSubCategoryValidator, updateCategoryValidator, createContentValidator, paginationValidator } from "./category.validation";
 
 export const createCategory = async (req: Request, res: Response) => {
-  const { error } = createCategorySchema.validate(req.body);
+  const { error } = createCategoryValidator.validate(req.body);
   if (error) return res.status(400).json({ message: error.message });
 
   const data = await categoryService.createCategory(req.body);
@@ -11,43 +11,104 @@ export const createCategory = async (req: Request, res: Response) => {
 };
 
 export const listCategories = async (req: Request, res: Response) => {
-  const { value } = paginationSchema.validate(req.query);
+  const { value } = paginationValidator.validate(req.query);
   const result = await categoryService.listCategories(value.page, value.limit, value.search);
-  res.json({ success: true, ...result });
+  return res.json({
+    success: true,
+    message: "Categories retrieved successfully",
+    data: result
+  });
+  // res.json({ success: true, ...result });
+};
+
+export const createSubCategory = async (req: Request, res: Response) => {
+  const { error } = createSubCategoryValidator.validate(req.body);
+  if (error) return res.status(400).json({ message: error.message });
+
+  const data = await categoryService.createSubCategory(req.body);
+  res.status(201).json({ success: true, data });
 };
 
 export const listSubCategories = async (req: Request, res: Response) => {
-  const { value } = paginationSchema.validate(req.query);
-  const result = await categoryService.listSubCategories(value.page, value.limit);
-  res.json({ success: true, ...result });
+
+  const { categoryId } = req.query as { categoryId: string }; //query parameter
+  const result = await categoryService.listSubCategories(categoryId)
+  return res.json({
+    success: true,
+    message: "Subcategories retrieved successfully",
+    data: result
+  });
+
 };
 
-interface CategoryParams {
-  id: string;
-}
 
-export const updateCategory = async (req: Request<CategoryParams>, res: Response) => {
-  const { error } = updateCategorySchema.validate(req.body);
+export const createContent = async (req: Request, res: Response) => {
+
+  const { error } = createContentValidator.validate(req.body);
   if (error) return res.status(400).json({ message: error.message });
 
-  const data = await categoryService.updateCategory(req.params.id, req.body);
-  res.json({ success: true, data });
+  const data = await categoryService.createContent(req.body);
+  res.status(201).json({ success: true, data });
+
 };
 
-export const updateSubCategory = async (req: Request<CategoryParams>, res: Response) => {
-  const data = await categoryService.updateSubCategory(req.params.id, req.body);
-  res.json({ success: true, data });
+export const listContents = async (req: Request, res: Response) => {
+
+  const { subcategoryId } = req.query as { subcategoryId: string }; //query parameter
+  const result = await categoryService.listContents(subcategoryId)
+  return res.json({
+    success: true,
+    message: "Content retrieved successfully",
+    data: result
+  });
+
 };
 
-export const deleteCategory = async (req: Request<CategoryParams>, res: Response) => {
-  await categoryService.deleteCategory(req.params.id);
-  res.json({ success: true, message: "Category deleted" });
+export const listCategoriesTree = async (req: Request, res: Response) => {
+
+  const { categoryId } = req.query as { categoryId: string }; //query parameter
+  const result = await categoryService.listCategoryTree(categoryId);
+  if (!result) {
+    return res.status(404).json({ message: "Category not found" });
+  }
+
+  return res.json({
+    success: true,
+    message: "Content retrieved successfully",
+    data: result
+  });
+
 };
 
-export const deleteSubCategory = async (req: Request<CategoryParams>, res: Response) => {
-  await categoryService.deleteSubCategory(req.params.id);
-  res.json({ success: true, message: "SubCategory deleted" });
-};
+
+
+
+// interface CategoryParams {
+//   id: string;
+// }
+
+// export const updateCategory = async (req: Request<CategoryParams>, res: Response) => {
+//   const { error } = updateCategoryValidator.validate(req.body);
+//   if (error) return res.status(400).json({ message: error.message });
+
+//   const data = await categoryService.updateCategory(req.params.id, req.body);
+//   res.json({ success: true, data });
+// };
+
+// export const updateSubCategory = async (req: Request<CategoryParams>, res: Response) => {
+//   const data = await categoryService.updateSubCategory(req.params.id, req.body);
+//   res.json({ success: true, data });
+// };
+
+// export const deleteCategory = async (req: Request<CategoryParams>, res: Response) => {
+//   await categoryService.deleteCategory(req.params.id);
+//   res.json({ success: true, message: "Category deleted" });
+// };
+
+// export const deleteSubCategory = async (req: Request<CategoryParams>, res: Response) => {
+//   await categoryService.deleteSubCategory(req.params.id);
+//   res.json({ success: true, message: "SubCategory deleted" });
+// };
 
 
 

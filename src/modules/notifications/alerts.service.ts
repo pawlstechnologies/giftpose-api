@@ -50,27 +50,88 @@ class AlertService {
 
     const regexArray = keywords.map(kw => new RegExp(kw, "i"));
 
-    const categories = await CategoryModel.find({
-      $or: [
-        { name: { $in: regexArray } },
-        { slug: { $in: regexArray } }
-      ]
-    }).sort({ name: 1 });
+    const result = await CategoryModel.aggregate([
+    /* Join Subcategories */
+    {
+      $lookup: {
+        from: "subcategories",
+        localField: "_id",
+        foreignField: "categoryId",
+        as: "subcategories"
+      }
+    },
 
-    // Match SubCategories
-    const subcategories = await SubCategoryModel.find({
-      $or: [
-        { name: { $in: regexArray } },
-        { slug: { $in: regexArray } }
-      ]
-    })
-      .populate("category", "name slug") // include parent category
-      .sort({ name: 1 });
+    { $unwind: { path: "$subcategories", preserveNullAndEmptyArrays: true } },
 
-    return {
-      categories,
-      subcategories
-    };
+    /* Join Contents */
+    {
+      $lookup: {
+        from: "contents",
+        localField: "subcategories._id",
+        foreignField: "subcategoryId",
+        as: "subcategories.contents"
+      }
+    },
+
+    /* Filter deleted */
+    {
+      $match: {
+        status: { $ne: "Deleted" }
+      }
+    },
+
+    /* Match keywords at ANY level */
+    {
+      $match: {
+        $or: [
+          { name: { $in: regexArray } }, // category
+          { slug: { $in: regexArray } },
+
+          { "subcategories.name": { $in: regexArray } },
+          { "subcategories.slug": { $in: regexArray } },
+
+          { "subcategories.contents.name": { $in: regexArray } }
+        ]
+      }
+    },
+
+    /* Group back per category */
+    {
+      $group: {
+        _id: "$_id",
+        name: { $first: "$name" },
+        slug: { $first: "$slug" },
+        status: { $first: "$status" },
+        subcategories: { $push: "$subcategories" }
+      }
+    },
+
+    { $sort: { name: 1 } }
+  ]);
+
+  return result;
+
+    // const categories = await CategoryModel.find({
+    //   $or: [
+    //     { name: { $in: regexArray } },
+    //     { slug: { $in: regexArray } }
+    //   ]
+    // }).sort({ name: 1 });
+
+    // // Match SubCategories
+    // const subcategories = await SubCategoryModel.find({
+    //   $or: [
+    //     { name: { $in: regexArray } },
+    //     { slug: { $in: regexArray } }
+    //   ]
+    // })
+    //   .populate("category", "name slug") // include parent category
+    //   .sort({ name: 1 });
+
+    // return {
+    //   categories,
+    //   subcategories
+    // };
   }
 
 
