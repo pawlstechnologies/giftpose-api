@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import alertService from "./alerts.service";
 import { createAlertSchema, updateAlertSchema, paginationSchema, notificationKeywordSchema } from "./alerts.validation";
 
@@ -82,5 +82,24 @@ export const getCategoriesByKeywords = async (req: Request, res: Response) => {
         });
     }
 };
+
+export const listAllAlert = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const alerts = await alertService.fetchAllAlert();
+
+    res.status(200).json({
+      success: true,
+      message: "Alerts fetched successfully",
+      data: alerts,
+    });
+
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Failed to fetch items'
+    });
+  }
+};
+
 
 

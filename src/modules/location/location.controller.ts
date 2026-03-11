@@ -1,7 +1,8 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { LocationService } from "./location.service";
-import  ApiError  from "../../utils/ApiError";
+import ApiError from "../../utils/ApiError";
 
+const locationService = new LocationService();
 
 export const fetchPostcodeLocation = async (req: Request, res: Response) => {
   const locationService = new LocationService();
@@ -27,7 +28,7 @@ export const fetchPostcodeLocation = async (req: Request, res: Response) => {
     );
 
     // res.status(201).json(locationData);
-     res.status(201).json({
+    res.status(201).json({
       status: true,
       message: 'Locations created successfully',
       data: locationData
@@ -65,7 +66,26 @@ export const getDistance = async (req: Request, res: Response) => {
 
     res.status(500).json({ message: 'Internal server error' });
   }
-};  
+};
+
+
+export const listAllLocation = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const locations = await locationService.fetchAllLocation();
+
+    res.status(200).json({
+      success: true,
+      message: "Locations fetched successfully",
+      data: locations,
+    });
+
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Failed to fetch items'
+    });
+  }
+};
 
 
 

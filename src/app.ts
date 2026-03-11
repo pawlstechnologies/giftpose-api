@@ -17,7 +17,7 @@ app.use(express.json());
 
 
 app.get("/api", (_req, res) => {
-  res.json({ message: "Welcome to GiftPose API - the best thing 🚀" });
+  res.json({ message: "Welcome to GiftPose API - the best thing after Jollof Rice 🚀" });
 });
 
 ///list of routes

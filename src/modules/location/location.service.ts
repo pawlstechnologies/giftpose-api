@@ -1,13 +1,13 @@
-import axios  from "axios";
+import axios from "axios";
 import { LocationInterface } from "./location.types";
 import LocationModel from "./location.mdel";
-import  ApiError  from '../../utils/ApiError';
+import ApiError from '../../utils/ApiError';
 
 import { getDistancebetweenCoordinates } from "../../utils/distance";
 
 
 export class LocationService {
-     async getLocationByPostcode(
+    async getLocationByPostcode(
         postCode: string,
         deviceId: string,
         miles: number
@@ -88,6 +88,16 @@ export class LocationService {
         );
 
         return distance;
+    }
+
+    async fetchAllLocation() {
+
+        const items = await LocationModel
+            .find()
+            .sort({ createdAt: -1 }) // optional sorting
+            .lean();
+
+        return items;
     }
 
 
