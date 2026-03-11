@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createAlert, listAlerts, updateAlert, deleteAlert, getCategoriesByKeywords } from "./alerts.controller";
+import { createAlert, listAlerts, updateAlert, deleteAlert, getCategoriesByKeywords, listAllAlert } from "./alerts.controller";
 
 
 const router = Router();
@@ -9,6 +9,7 @@ router.get("/", listAlerts);
 router.put("/:id", updateAlert);
 router.delete("/:id", deleteAlert);
 router.post("/search-keywords", getCategoriesByKeywords);
+router.get("/all", listAllAlert);
 
 export default router;
 

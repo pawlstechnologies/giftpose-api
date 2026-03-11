@@ -156,6 +156,18 @@ class AlertService {
       // TODO: integrate email / push / in-app notification
     }
   }
+
+   async fetchAllAlert() {
+      
+              const items = await DeviceAlertModel
+                  .find()
+                  .sort({ createdAt: -1 }) // optional sorting
+                  .lean();
+      
+              return items;
+          }
+
+
 }
 
 export default new AlertService();

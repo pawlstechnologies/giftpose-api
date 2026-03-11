@@ -9,7 +9,6 @@ import TrashNothingSyncService from './modules/items/item.sync';
 
 const PORT = process.env.PORT || 4000;
 
-
 const startServer = async () => {
     try {
 
