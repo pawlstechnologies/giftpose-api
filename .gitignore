@@ -4,6 +4,10 @@ node_modules/
 # Production build
 dist/
 
+
+# Firbase
+src/firebase-service-account.json
+
 # Environment variables
 .env
 .env.*

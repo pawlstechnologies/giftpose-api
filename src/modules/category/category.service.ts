@@ -65,7 +65,6 @@ class CategoryService {
   }
 
   ///giant tree
-
   async listCategoryTree(categoryId: string) {
     const result = await CategoryModel.aggregate([
       {
