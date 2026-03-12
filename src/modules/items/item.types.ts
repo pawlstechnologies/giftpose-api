@@ -1,9 +1,13 @@
+import { Types } from "mongoose";
+
 export interface ItemInterface {
     name: string;
     description?: string;
     imageUrls: string[];
-    category: string;
-    subCategory?: string;
+    categoryId: Types.ObjectId; //string;
+    subCategoryId?: Types.ObjectId; //string;
+    contentId?: Types.ObjectId; //string;
+    isCategorised: boolean;
     city?: string;
     lng: number;
     lat: number;
@@ -15,8 +19,7 @@ export interface ItemInterface {
     partner?: string;
     isTaken: boolean;
     visitCount: number;
-    createdAt?: Date;
-    updatedAt?: Date;
+   
     url: String;
     thumbnail: String;
     type: String;
@@ -25,5 +28,8 @@ export interface ItemInterface {
     postId: Number;
     expiration: Date;
     status: String;
+
+     createdAt?: Date;
+    updatedAt?: Date;
 
 }

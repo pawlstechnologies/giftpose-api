@@ -6,6 +6,7 @@ import itemRoutes from './modules/items/item.routes';
 import locationRoutes from './modules/location/location.routes';
 import categoryRoutes from './modules/category/category.routes';
 import alertRoutes from './modules/notifications/alerts.routes';
+import notificationRoutes from './pushnotification/notification.routes';
 import { errorHandler } from "./middleware/error.middleware";
 
 
@@ -25,6 +26,7 @@ app.use("/api/location", locationRoutes);
 app.use("/api/item", itemRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/alerts", alertRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 
 app.use(errorHandler); //handles error globally

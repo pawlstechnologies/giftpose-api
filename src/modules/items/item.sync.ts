@@ -2,9 +2,11 @@ import cron from 'node-cron';
 
 import ItemModel from './item.model';
 import TrashNothingApi from '../../utils/trashnothing.api'; //= require('@utils/trashnoting.api');
+import { PushNotificationService } from '../../pushnotification/push.service';
+import aiCategorisationService from '../ai/categorisation.service';
 
 
-
+const pushService = new PushNotificationService();
 
 const formatToSecond = (date: Date): string =>
     date.toISOString().split('.')[0];
@@ -44,8 +46,9 @@ class TrashNothingSyncService {
                             name: post.title,
                             description: post.content,
                             imageUrls: post.photos?.map((p: any) => p.url) || [],
-                            category: 'Free',
-                            subCategory: 'TrashNothing',
+                            // categoryId: 'Free',
+                            // subCategoryId: 'TrashNothing',
+                            // contentId: 'TrashNothing',
                             city: '',
                             postCode: 'UNKNOWN',
                             location: {
@@ -69,9 +72,36 @@ class TrashNothingSyncService {
                 }
             }));
 
-            await ItemModel.bulkWrite(bulkOps);
+            // await ItemModel.bulkWrite(bulkOps);
+            const result = await ItemModel.bulkWrite(bulkOps);
 
             console.log(`[CRON] Updated ${posts.length} posts`);
+
+            /**
+             * Fetch newly inserted items
+             */
+            const newItems = await ItemModel.find({
+                postId: { $in: posts.map((p: any) => p.post_id) },
+                isCategorised: false
+            }).lean();
+
+
+            /**
+             * Send push notifications
+             */
+            if (newItems.length) {
+                console.log(`[CRON] AI categorising ${newItems.length} items`);
+                
+                 await aiCategorisationService.categoriseItems(newItems);
+
+
+                console.log(`[CRON] Checking alerts and in app notification for ${newItems.length} items`);
+                await pushService.notifyDevicesForItems(newItems);
+
+                // console.log(`[CRON] `);
+                // console.log(`[CRON] Creating notifications for ${newItems.length} items`);
+                // await PushNotificationService.notifyDevicesForItems(newItems);
+            }
 
             this.lastSync = now;
 
