@@ -118,8 +118,8 @@ export class AuthService {
     async resendVerification(email: string) {
         const user = await UserModel.findOne({ email });
 
-        if (!user) throw new Error('User not found');
-        if (user.isVerified) throw new Error('Already verified');
+        if (!user) throw new ApiError(404, 'User not found');
+        if (user.isVerified) throw new ApiError(433, 'Already verified');
 
         const code = generateVerificationCode();
 
@@ -165,7 +165,7 @@ export class AuthService {
     async forgotPassword(email: string) {
         const user = await UserModel.findOne({ email });
 
-        if (!user) throw new Error('User not found');
+        if (!user) throw new ApiError(404, 'User not found');
 
         // const rawToken = crypto.randomBytes(32).toString('hex');
         // const hashedToken = crypto
@@ -193,18 +193,18 @@ export class AuthService {
      
         const user = await UserModel.findOne({ email });
 
-        if (!user) throw new Error('Invalid token');
+        if (!user) throw new ApiError(404, 'Invalid token');
 
         if (user.resetPasswordExpires! < new Date()) {
-            throw new Error('Token expired');
+            throw new ApiError(433, 'Token expired');
         }
 
         if (user.resetPasswordCode !== code) {
-            throw new Error('Invalid code');
+            throw new ApiError(433, 'Invalid code');
         }
 
         if (user.resetPasswordExpires! < new Date()) {
-            throw new Error('Code expired');
+            throw new ApiError(433, 'Code expired');
         }
 
 
@@ -230,7 +230,7 @@ export class AuthService {
         const user = await UserModel.findById(userId);
 
         if (!user) {
-            throw new Error('User not found');
+            throw new ApiError(404, 'User not found');
         }
 
         // Invalidate refresh token
