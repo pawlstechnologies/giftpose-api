@@ -6,7 +6,6 @@ import { AuthRequest } from "../../middleware/auth.middleware";
 
 export const getMe = async (req: AuthRequest, res: Response) => {
 
-
     try {
       return res.status(200).json({
         status: true,

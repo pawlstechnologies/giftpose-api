@@ -7,15 +7,15 @@ const authService = new AuthService();
 
 export const register = async (req: Request, res: Response) => {
     try {
-        // const result = await authService.register(req.body);
-        const { accessToken, refreshToken, user } =
-            await authService.login(req.body);
-        setAuthCookies(res, accessToken, refreshToken);
+        const result = await authService.register(req.body);
+        // const { accessToken, refreshToken, user } =
+        //     await authService.login(req.body);
+        // setAuthCookies(res, accessToken, refreshToken);
 
         res.status(201).json({
             status: true,
-            message: 'User Created Successfully. Verify email address',
-            data: user,
+            message: 'User Created Successfully. Kindly verify email address',
+            data: result,
         });
     } catch (error: any) {
         res.status(error.statusCode || 500).json({ message: error.message });
@@ -25,7 +25,7 @@ export const register = async (req: Request, res: Response) => {
 export const login = async (req: Request, res: Response) => {
     try {
         // const result = await authService.login(req.body);
-         const { accessToken, user } = await authService.login(req.body);
+        const { accessToken, user } = await authService.login(req.body);
         res.status(201).json({
             status: true,
             message: 'User Logged In Successfully',
@@ -85,12 +85,12 @@ export const forgotPassword = async (req: Request, res: Response) => {
             });
         }
 
-        await authService.forgotPassword(email);
+       const result =  await authService.forgotPassword(email);
 
-        // 🔒 Prevent user enumeration
-        return res.status(200).json({
-            message: 'If this email exists, a reset link/token has been sent'
-        });
+       return res.status(200).json(result);
+        // return res.status(200).json({
+        //     message: 'If this email exists, a reset link/token has been sent'
+        // });
 
     } catch (err: any) {
         return res.status(400).json({
@@ -103,9 +103,16 @@ export const forgotPassword = async (req: Request, res: Response) => {
 export const resetPassword = async (req: Request, res: Response) => {
 
     try {
-        const { token, newPassword, confirmPassword } = req.body;
 
-        if (!token || !newPassword || !confirmPassword) {
+        const { email, code, newPassword, confirmPassword } = req.body;
+
+        // if (!token || !newPassword || !confirmPassword) {
+        //     return res.status(400).json({
+        //         message: 'All fields are required'
+        //     });
+        // }
+
+        if (!email || !code || !newPassword || !confirmPassword) {
             return res.status(400).json({
                 message: 'All fields are required'
             });
@@ -123,7 +130,9 @@ export const resetPassword = async (req: Request, res: Response) => {
             });
         }
 
-        const result = await authService.resetPassword(token, newPassword);
+        const result = await authService.resetPassword(email,
+      code,
+      newPassword);
 
         return res.status(200).json(result);
 
@@ -138,22 +147,22 @@ export const logout = async (req: AuthRequest, res: Response) => {
 
 
     try {
-      const userId = req.user._id;
+        const userId = req.user._id;
 
-      await authService.logout(userId);
+        await authService.logout(userId);
 
-      // Optional: if you were using cookies, clear them
-      // res.clearCookie('accessToken');
-      // res.clearCookie('refreshToken');
+        // Optional: if you were using cookies, clear them
+        // res.clearCookie('accessToken');
+        // res.clearCookie('refreshToken');
 
-      return res.status(200).json({
-        message: 'Logged out successfully'
-      });
+        return res.status(200).json({
+            message: 'Logged out successfully'
+        });
 
     } catch (err: any) {
-      return res.status(400).json({
-        message: err.message
-      });
+        return res.status(400).json({
+            message: err.message
+        });
     }
 
 }
