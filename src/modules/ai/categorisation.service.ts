@@ -3,6 +3,7 @@ import { SubCategoryModel } from "../category/category.model";
 import { ContentModel } from "../category/category.model";
 import ItemModel from "../items/item.model";
 import DeepSeekClient from "../../utils/deepseek.client";
+import OpenAIClient from "../../utils/openai.client";
 import { Types } from "mongoose";
 
 class AICategorisationService {
@@ -25,7 +26,6 @@ class AICategorisationService {
         };
     }
 
-
     async categoriseItems(items: any[]) {
 
         const taxonomy = await this.getTaxonomy();
@@ -34,17 +34,15 @@ class AICategorisationService {
 
             try {
 
-
-                const imageUrl =
+                const image =
                     item.thumbnail ||
                     (item.imageUrls?.length ? item.imageUrls[0] : undefined);
 
-
-                const ai = await DeepSeekClient.categoriseItem(
+                const ai = await OpenAIClient.categoriseItem(
                     {
                         title: item.name,
                         description: item.description,
-                        // imageUrl
+                        image: image
                     },
                     taxonomy
                 );
@@ -70,6 +68,51 @@ class AICategorisationService {
             }
         }
     }
+
+    // async categoriseItems(items: any[]) {
+
+    //     const taxonomy = await this.getTaxonomy();
+
+    //     for (const item of items) {
+
+    //         try {
+
+
+    //             const imageUrl =
+    //                 item.thumbnail ||
+    //                 (item.imageUrls?.length ? item.imageUrls[0] : undefined);
+
+
+    //             const ai = await OpenAIClient.categoriseItem(
+    //                 {
+    //                     title: item.name,
+    //                     description: item.description,
+    //                     image
+    //                 },
+    //                 taxonomy
+    //             );
+
+    //             const category = await this.resolveCategory(ai);
+    //             const subcategory = await this.resolveSubCategory(ai, category._id);
+    //             const content = await this.resolveContent(ai, subcategory._id);
+
+    //             await ItemModel.updateOne(
+    //                 { _id: item._id },
+    //                 {
+    //                     $set: {
+    //                         categoryId: category._id,
+    //                         subCategoryId: subcategory._id,
+    //                         contentId: content._id,
+    //                         isCategorised: true
+    //                     }
+    //                 }
+    //             );
+
+    //         } catch (err) {
+    //             console.error("AI categorisation failed:", err);
+    //         }
+    //     }
+    // }
 
     async resolveCategory(ai: any) {
 

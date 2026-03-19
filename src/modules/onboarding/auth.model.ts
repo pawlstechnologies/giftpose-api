@@ -1,29 +1,88 @@
-import { Schema, model, Types } from "mongoose"
-import { UserInterface } from "./auth.types"
+// import { Schema, model, Types } from "mongoose"
+// import { UserInterface } from "./auth.types"
 
-const UserSchema = new Schema<UserInterface>(
+// const UserSchema = new Schema<UserInterface>(
+//     {
+//         deviceId: { type: String },
+
+//         locationId: { type: Types.ObjectId, ref: "Location" },
+
+//         fullname: { type: String, required: true },
+
+//         email: { type: String, required: true, unique: true, lowercase: true },
+
+//         username: { type: String, required: true, unique: true },
+
+//         password: { type: String, required: true },
+
+//         emailVerified: { type: Boolean, default: false },
+
+//         verificationCode: { type: String },
+
+//         verificationCodeExpires: { type: Date }
+//     },
+//     {
+//         timestamps: true // creates createdAt and updatedAt
+//     }
+// )
+
+// export const UserModel = model<UserInterface>("User", UserSchema)
+
+
+
+import mongoose, { Document, Schema } from 'mongoose';
+
+export interface IUser extends Document {
+    deviceId: string;
+    fullname: string;
+    email: string;
+    username: string;
+    password: string;
+    isVerified: boolean;
+    refreshToken?: string;
+    resetPasswordToken?: string;
+    resetPasswordExpires?: Date;
+    verificationCode?: string;
+    verificationCodeExpires?: Date;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+const UserSchema = new Schema<IUser>(
     {
-        deviceId: { type: String },
+        deviceId: { type: String, required: true, unique: true },
+        fullname: { type: String, required: true, trim: true },
 
-        locationId: { type: Types.ObjectId, ref: "Location" },
+        email: {
+            type: String,
+            required: true,
+            unique: true,
+            lowercase: true,
+            index: true
+        },
 
-        fullname: { type: String, required: true },
-
-        email: { type: String, required: true, unique: true, lowercase: true },
-
-        username: { type: String, required: true, unique: true },
+        username: {
+            type: String,
+            required: true,
+            unique: true,
+            index: true
+        },
 
         password: { type: String, required: true },
 
-        emailVerified: { type: Boolean, default: false },
+        isVerified: { type: Boolean, default: false },
 
-        verificationCode: { type: String },
+        refreshToken: String,
 
-        verificationCodeExpires: { type: Date }
+        resetPasswordToken: String,
+        resetPasswordExpires: Date,
+
+        verificationCode: String,
+        verificationCodeExpires: Date
     },
-    {
-        timestamps: true // creates createdAt and updatedAt
-    }
-)
+    { timestamps: true }
+);
 
-export const UserModel = model<UserInterface>("User", UserSchema)
+export const UserModel = mongoose.model<IUser>('User', UserSchema);
+
+
