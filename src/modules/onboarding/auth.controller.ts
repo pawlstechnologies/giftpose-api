@@ -87,10 +87,11 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
        const result =  await authService.forgotPassword(email);
 
-       return res.status(200).json(result);
-        // return res.status(200).json({
-        //     message: 'If this email exists, a reset link/token has been sent'
-        // });
+    //    return res.status(200).json(result);
+        return res.status(200).json({
+             status: true,
+            message: 'If this email exists, a reset code has been sent'
+        });
 
     } catch (err: any) {
         return res.status(400).json({
@@ -134,7 +135,13 @@ export const resetPassword = async (req: Request, res: Response) => {
       code,
       newPassword);
 
-        return res.status(200).json(result);
+      return res.status(201).json({
+         status: true,
+            message: 'Password Reset Completed',
+            data: result
+        });
+
+        // return res.status(200).json(result);
 
     } catch (err: any) {
         return res.status(400).json({
