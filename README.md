@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last Updated:** [Insert Date]
+
 
 ## 1. Introduction
 
@@ -85,7 +85,7 @@ Depending on your location, you may have the right to:
 * Object to or restrict processing
 * Withdraw consent at any time
 
-To exercise these rights, contact us at: [Insert Contact Email]
+To exercise these rights, contact us at: contact@giftpose.com
 
 ---
 
@@ -110,8 +110,5 @@ We may update this Privacy Policy from time to time. We will notify users of any
 ## 11. Contact Us
 
 If you have any questions about this Privacy Policy, please contact us at:
-**Email:** [Insert Email Address]
+**Email:** contact@giftpose.com
 
----
-
-*Optional Add-on:* If your app operates in regions like the UK or EU, ensure compliance with applicable laws such as GDPR.
