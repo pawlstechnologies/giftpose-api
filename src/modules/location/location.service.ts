@@ -8,10 +8,15 @@ import { getDistancebetweenCoordinates } from "../../utils/distance";
 
 export class LocationService {
     async getLocationByPostcode(
+        firebaseToken: string,
         postCode: string,
         deviceId: string,
         miles: number
     ): Promise<LocationInterface> {
+
+        if (!firebaseToken?.trim()) {
+            throw new ApiError(400, 'Firebase Token is required');
+        }
 
         if (!postCode?.trim()) {
             throw new ApiError(400, 'Postcode is required');
@@ -51,13 +56,18 @@ export class LocationService {
         );
 
         const locationData = {
+            firebaseToken,
             deviceId,
             postCode,
             lng: location.lng,
             lat: location.lat,
             city: cityComponent?.long_name || '',
             address: result.formatted_address || '',
-            miles
+            miles,
+            location: {
+                type: 'Point',
+                coordinates: [location.lng, location.lat] // 🔥 MUST BE [lng, lat]
+            }
         };
 
         const savedLocation = await LocationModel.findOneAndUpdate(
@@ -68,6 +78,73 @@ export class LocationService {
 
         return savedLocation.toObject();
     }
+
+    async getDevicesNearItem(lng: number, lat: number) {
+
+        //const maxDistanceMeters =  radiusMiles * 1609.34;
+
+        console.log('📍 Finding devices near:', { lng, lat });
+
+
+        const MAX_RADIUS_MILES = 50;
+        const maxDistanceMeters = MAX_RADIUS_MILES * 1609.34;
+
+        const devices = await LocationModel.aggregate([
+            {
+                $geoNear: {
+                    near: { type: "Point", coordinates: [lng, lat] },
+                    distanceField: "distanceInMeteres",
+                    maxDistance: maxDistanceMeters,
+                    spherical: true
+                }
+            },
+            {
+                $match: {
+                    firebaseToken: { $exists: true, $ne: null }
+                }
+            },
+            {
+                $addFields: {
+                    distanceInMiles: { $divide: ["$distanceInMeters", 1609.34] }
+                }
+            },
+            {
+                $project: {
+                    firebaseToken: 1,
+                    deviceId: 1,
+                    distanceInMiles: 1,
+                    miles: 1 // user preference
+                }
+            }
+        ]);
+
+        console.log(`📡 Devices found (before filtering): ${devices.length}`);
+
+        devices.forEach((d: any) => {
+            if (!d.distanceInMiles) {
+                console.log(`⚠️ Device ${d.deviceId} missing distance`);
+                return;
+            }
+
+            console.log(
+                `➡️ Device ${d.deviceId} | Distance: ${d.distanceInMiles.toFixed(2)} miles | Radius: ${d.miles}`
+            );
+        });
+
+
+
+        const filteredDevices = devices.filter((device: any) => {
+            return device.distanceInMiles <= (device.miles || 10);
+        });
+
+        console.log(`🎯 Devices after radius filter: ${filteredDevices.length}`);
+
+        return filteredDevices;
+        // return devices;
+
+
+    }
+
 
     async calculateDistance(postCode1: string, postCode2: string): Promise<number> {
         const normalize = (p: string) => p.trim().toUpperCase();

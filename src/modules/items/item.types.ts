@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 
 export interface ItemInterface {
+    userId: Types.ObjectId;
     name: string;
     description?: string;
     imageUrls: string[];
@@ -19,7 +20,7 @@ export interface ItemInterface {
     partner?: string;
     isTaken: boolean;
     visitCount: number;
-   
+
     url: String;
     thumbnail: String;
     type: String;
@@ -29,7 +30,7 @@ export interface ItemInterface {
     expiration: Date;
     status: String;
 
-     createdAt?: Date;
+    createdAt?: Date;
     updatedAt?: Date;
 
 }

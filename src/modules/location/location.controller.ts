@@ -6,7 +6,7 @@ const locationService = new LocationService();
 
 export const fetchPostcodeLocation = async (req: Request, res: Response) => {
   const locationService = new LocationService();
-  const { postcode, deviceId, miles } = req.body;
+  const { firebaseToken, postcode, deviceId, miles } = req.body;
 
   if (!postcode?.trim()) {
     return res.status(400).json({ message: 'Postcode is required' });
@@ -22,6 +22,7 @@ export const fetchPostcodeLocation = async (req: Request, res: Response) => {
 
   try {
     const locationData = await locationService.getLocationByPostcode(
+      firebaseToken,
       postcode,
       deviceId,
       Number(miles)

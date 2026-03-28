@@ -5,7 +5,9 @@ export type ItemModel = HydratedDocument<ItemInterface>;
 
 const itemSchema = new Schema<ItemModel>(
   {
-
+    userId: {
+      type: Schema.Types.ObjectId, ref: "User", required: false
+    },
     name: { type: String, required: true },
     description: { type: String },
     imageUrls: { type: [String], default: [] },

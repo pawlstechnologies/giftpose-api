@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 import ItemsService from './item.service';
+import { AuthRequest } from '../../middleware/auth.middleware';
 
 
 const itemService = new ItemsService();
@@ -15,6 +16,60 @@ export const createItem = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         res.status(error.statusCode || 500).json({ message: error.message });
+
+    }
+}
+
+export const analyseImage = async (req: AuthRequest, res: Response) => {
+
+    try {
+        const files = req.files as Express.Multer.File[];
+
+        if (!files || files.length === 0) {
+            return res.status(400).json({
+                message: 'Images are required'
+            });
+        }
+
+        const result = await itemService.analyseImage(files);
+
+        return res.status(200).json({
+            message: 'AI analysis complete',
+            data: result
+        });
+
+    } catch (err: any) {
+        return res.status(400).json({
+            message: err.message
+        });
+    }
+
+}
+
+export const postItem = async (req: AuthRequest, res: Response) => {
+    try {
+
+        const user = req.user;
+
+        if (!user) {
+            return res.status(401).json({
+                message: 'Unauthorized'
+            });
+        }
+
+
+        const item = await itemService.postItem(req.body, req.file, user);
+
+        return res.status(201).json({
+            status: true,
+            message: 'Item Posted Successfully',
+            data: item
+        });
+
+    } catch (err: any) {
+        return res.status(400).json({
+            message: err.message
+        });
     }
 }
 
@@ -69,37 +124,37 @@ interface GetDeviceParams {
 }
 
 export const searchItemsNearMe = async (req: Request<GetDeviceParams>, res: Response) => {
-  try {
-    const { deviceId } = req.params;
-    const { keywords, page = 1, limit = 10 } = req.body;
+    try {
+        const { deviceId } = req.params;
+        const { keywords, page = 1, limit = 10 } = req.body;
 
-    if (!deviceId) return res.status(400).json({ success: false, message: "DeviceId is required" });
+        if (!deviceId) return res.status(400).json({ success: false, message: "DeviceId is required" });
 
-    const offset = (page - 1) * limit;
+        const offset = (page - 1) * limit;
 
-    const items = await itemService.searchItemsNearMe(deviceId, keywords, Number(limit), offset);
+        const items = await itemService.searchItemsNearMe(deviceId, keywords, Number(limit), offset);
 
-    return res.json({
-      success: true,
-      message: "Items near you fetched successfully",
-      page: Number(page),
-      perPage: Number(limit),
-      data: items
-    });
+        return res.json({
+            success: true,
+            message: "Items near you fetched successfully",
+            page: Number(page),
+            perPage: Number(limit),
+            data: items
+        });
 
-  } catch (error: any) {
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message || "Internal server error"
-    });
-  }
+    } catch (error: any) {
+        return res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    }
 };
 
 // export const searchItemsNearMe = async (req: Request<GetDeviceParams>, res: Response) => {
 //   try {
 //     const { deviceId } = req.params;
 //     const { keywords, page = 1, limit = 10 } = req.body; // POST body
-    
+
 //     if (!deviceId) return res.status(400).json({ success: false, message: "DeviceId is required" });
 
 //     const offset = (page - 1) * limit;
