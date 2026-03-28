@@ -2,8 +2,6 @@
 import * as admin from 'firebase-admin';
 import serviceAccount = require('../serviceAccountKey.json');  //from "../firebase-service-account.json";
 
-
-
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
 });
