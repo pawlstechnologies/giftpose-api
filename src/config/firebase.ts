@@ -1,4 +1,5 @@
-import admin from "firebase-admin";
+// import admin from "firebase-admin";
+import * as admin from 'firebase-admin';
 import serviceAccount  from "../firebase-service-account.json";
 
 
@@ -6,6 +7,9 @@ import serviceAccount  from "../firebase-service-account.json";
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
 });
+
+export default admin;
+
 
 // const token = ;
 // async function testPush() {
@@ -25,6 +29,6 @@ admin.initializeApp({
 //   }
 // }
 // testPush();
-export const firebaseMessaging = admin.messaging();
+// export const firebaseMessaging = admin.messaging();
 
 

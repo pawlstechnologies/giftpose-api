@@ -7,7 +7,7 @@ import cors from "cors";
 import itemRoutes from './modules/items/item.routes';
 import locationRoutes from './modules/location/location.routes';
 import categoryRoutes from './modules/category/category.routes';
-import alertRoutes from './modules/notifications/alerts.routes';
+import alertRoutes from './modules/alerts/alerts.routes';
 import notificationRoutes from './pushnotification/notification.routes';
 import authRoutes from './modules/onboarding/auth.routes';
 import userRoutes from './modules/user/user.routes';

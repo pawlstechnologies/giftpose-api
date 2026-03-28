@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import axios from 'axios';
 import ItemModel from './item.model';
 import { ItemInterface } from './item.types';
 import ApiError from '../../utils/ApiError';
@@ -7,11 +8,24 @@ import { PipelineStage } from 'mongoose';
 import LocationModel from '../location/location.mdel';
 import TrashNotingApi from '../../utils/trashnothing.api';
 import { getDistancebetweenCoordinates, calculateTravelTimes } from '../../utils/distance';
+import OpenAIClient from "../../utils/openai.client";
+import { CategoryModel } from "../category/category.model";
+import { SubCategoryModel } from "../category/category.model";
+import { ContentModel } from "../category/category.model";
+import { uploadToCloudinary } from "../../utils/uploadToCloudinary";
+import { sendPostCreatedEmail } from "../../utils/email";
+import NotificationModels from "../notification/notification.models";
+import { LocationService } from "../location/location.service";
+import { sendBulkPushNotification } from "../../utils/push";
+import OpenAI from "openai";
+import { DeviceAlertModel } from "../alerts/alerts.model";
+
+
 
 export default class ItemService {
     async createItem(data: ItemInterface) {
         if (!data.lng || !data.lat) {
-            throw new ApiError(400, 'Latitude and longitude are required');
+            throw new ApiError(413, 'Latitude and longitude are required');
         }
 
         const item = await ItemModel.create({
@@ -25,6 +39,353 @@ export default class ItemService {
         return item;
 
     }
+
+    async analyseImage(files: Express.Multer.File[]) {
+
+        if (!files || files.length === 0) {
+            throw new ApiError(413, 'Images are required, upload atleast one image');
+        }
+
+        // 🔥 1. Upload all images to Cloudinary
+        const imageUrls: string[] = [];
+        for (const file of files) {
+            const url = await uploadToCloudinary(file.path);
+            imageUrls.push(url);
+        }
+
+        const taxonomy = await this.getTaxonomy();
+
+        // 🔥 Combine images into one AI request
+        const ai = await OpenAIClient.imageCategorisatiion(
+            {
+                title: "",
+                description: "",
+                images: imageUrls
+            },
+            taxonomy //await this.getTaxonomy()
+        );
+        // 🔹 Map AI outputs to DB IDs (if they exist)
+        let category = await CategoryModel.findOne({ name: ai.category });
+        let subcategory = await SubCategoryModel.findOne({ name: ai.subcategory });
+        let content = await ContentModel.findOne({ name: ai.content });
+
+
+        // 🔥 HANDLE SUGGESTED CATEGORY
+        let suggestedCategoryDoc = null;
+        if (!category && ai.suggestedCategory) {
+            suggestedCategoryDoc = await CategoryModel.findOne({ name: ai.suggestedCategory.trim() });
+            if (!suggestedCategoryDoc) {
+                suggestedCategoryDoc = new CategoryModel({ name: ai.suggestedCategory.trim() });
+                await suggestedCategoryDoc.save(); // ✅ triggers pre-save slug
+            }
+        }
+
+
+        // 🔹 Suggested SubCategory
+        let suggestedSubcategoryDoc = null;
+        if (!subcategory && ai.suggestedSubcategory && suggestedCategoryDoc) {
+            suggestedSubcategoryDoc = await SubCategoryModel.findOne({
+                name: ai.suggestedSubcategory.trim(),
+                categoryId: suggestedCategoryDoc._id
+            });
+
+            if (!suggestedSubcategoryDoc) {
+                suggestedSubcategoryDoc = new SubCategoryModel({
+                    name: ai.suggestedSubcategory.trim(),
+                    categoryId: suggestedCategoryDoc._id
+                });
+                await suggestedSubcategoryDoc.save(); // ✅ triggers slug
+            }
+        }
+
+        // 🔹 Suggested Content
+        let suggestedContentDoc = null;
+        if (!content && ai.suggestedContent && suggestedSubcategoryDoc) {
+            suggestedContentDoc = await ContentModel.findOne({
+                name: ai.suggestedContent.trim(),
+                subcategoryId: suggestedSubcategoryDoc._id
+            });
+
+            if (!suggestedContentDoc) {
+                suggestedContentDoc = new ContentModel({
+                    name: ai.suggestedContent.trim(),
+                    subcategoryId: suggestedSubcategoryDoc._id
+                });
+                await suggestedContentDoc.save(); // ✅ triggers slug
+            }
+        }
+
+
+        return {
+            name: ai.title || ai.content || "Generated Item",
+            description: ai.description || ai.content,
+
+            category: ai.category || "",
+            categoryId: category?._id || null,
+
+            subcategory: ai.subcategory || "",
+            subcategoryId: subcategory?._id || null,
+
+            content: ai.content || "",
+            contentId: content?._id || null,
+
+
+            // suggestedCategory: ai.suggestedCategory || "",
+            // suggestedSubcategory: ai.suggestedSubcategory || "",
+            // suggestedContent: ai.suggestedContent || "",
+
+
+            suggestedCategory: ai.suggestedCategory || "",
+            suggestedCategoryId: suggestedCategoryDoc?._id || null,
+
+            suggestedSubcategory: ai.suggestedSubcategory || "",
+            suggestedSubcategoryId: suggestedSubcategoryDoc?._id || null,
+
+            suggestedContent: ai.suggestedContent || "",
+            suggestedContentId: suggestedContentDoc?._id || null,
+
+            images: imageUrls
+        };
+
+    }
+
+
+    async postItem(data: any, file: any, user: any) {
+
+        const {
+            name,
+            description,
+            categoryId,
+            subcategoryId,
+            contentId,
+            suggestedCategoryId,
+            suggestedSubcategoryId,
+            suggestedContentId,
+            imageUrls,
+            postCode,
+            country } = data;
+
+        const finalCategoryId = categoryId || suggestedCategoryId;
+        const finalSubcategoryId = subcategoryId || suggestedSubcategoryId;
+        const finalContentId = contentId || suggestedContentId;
+
+        if (!finalCategoryId || !finalSubcategoryId || !finalContentId) {
+            throw new Error('Invalid category structure');
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(finalCategoryId)) {
+            throw new Error('Invalid category ID');
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(finalSubcategoryId)) {
+            throw new Error('Invalid subcategory ID');
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(finalContentId)) {
+            throw new Error('Invalid content ID');
+        }
+
+
+        const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+
+        if (!apiKey) {
+            throw new Error('Google Maps API key is not configured');
+        }
+
+        const response = await axios.get(
+            'https://maps.googleapis.com/maps/api/geocode/json',
+            {
+                params: { address: postCode, key: apiKey }
+            }
+        );
+
+        const geoData = response.data;
+
+        if (geoData.status !== 'OK' || !geoData.results.length) {
+            throw new Error('Location not found for the provided postcode');
+        }
+
+        const result = geoData.results[0];
+        const location = result.geometry.location;
+
+        const cityComponent = result.address_components.find((comp: any) =>
+            comp.types.includes('locality') ||
+            comp.types.includes('postal_town')
+        );
+
+        const city = cityComponent?.long_name || '';
+
+
+        // const userId = user._id;
+        // const deviceId = user.deviceId;
+
+
+        // 🔥 3. Create item
+        const item = await ItemModel.create({
+            userId: user._id,
+
+            name,
+            description,
+            imageUrls,
+
+            categoryId: finalCategoryId,
+            subCategoryId: finalSubcategoryId,
+            contentId: finalContentId,
+
+            isCategorised: true,
+
+            city,
+            postCode,
+            country,
+
+            location: {
+                type: 'Point',
+                coordinates: [location.lng, location.lat]
+            },
+
+            partner: 'Gifpose', ///user.email,
+
+            expiration: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+
+            postId: Date.now() + Math.floor(Math.random() * 1000),
+
+            status: 'Live',
+            type: "offer",
+
+            thumbnail: imageUrls?.[0] || ''
+        });
+
+        // setImmediate(async () => {
+        //     try {
+        //         await this.handlePostSideEffects(user, item);
+        //     } catch (err) {
+        //         console.error('❌ Side effect error:', err);
+        //     }
+        // });
+
+
+
+        await this.handlePostSideEffects(user, item);
+
+        return item;
+
+    }
+
+    async getTaxonomy() {
+
+        // const categories = await CategoryModel.find().lean();
+        // const subcategories = await SubCategoryModel.find().lean();
+        // const contents = await ContentModel.find().lean();
+
+        const categories = await CategoryModel.find({}, { name: 1 }).lean();
+        const subcategories = await SubCategoryModel.find({}, { name: 1, categoryId: 1 }).lean();
+        const contents = await ContentModel.find({}, { name: 1, subcategoryId: 1 }).lean();
+
+        return {
+            categories,
+            subcategories,
+            contents
+        };
+    }
+
+
+
+
+    async handlePostSideEffects(user: any, item: any) {
+        try {
+
+            console.log('🚀 Running post side effects...');
+
+            //notify user in-app notification
+            await NotificationModels.create({
+                deviceId: user.deviceId,
+                userId: user._id,
+                title: 'Item Posted',
+                message: `${item.name} is now live`,
+                data: { itemId: item._id }
+            });
+            console.log('🔔 In-app notification created');
+
+
+            //notify user by email 
+            // await sendPostCreatedEmail(user.email, item);
+
+            console.log('📧 Email sent to:', user.email);
+
+
+
+            const locationService = new LocationService();
+
+            const devices = await locationService.getDevicesNearItem(
+                item.location.coordinates[0], // lng
+                item.location.coordinates[1]  // lat
+            );
+
+
+            if (!devices.length) return;
+            //fetch keywords
+            const deviceIds = devices.map((d: any) => d.deviceId);
+            const alerts = await DeviceAlertModel.find({
+                status: 'Active',
+                deviceId: { $in: deviceIds }
+            });
+
+            console.log(`🎯 Keyword alerts fetched: ${alerts.length}`);
+
+            if (!alerts.length) return;
+
+
+            // --- 4️⃣ AI semantic matching ---
+            const matchedDevices: any[] = [];
+            const itemText = `${item.name} ${item.description || ''}`;
+
+            for (const alert of alerts) {
+                const match = await OpenAIClient.isItemMatchingKeywords(itemText, alert.keywords, 0.6);
+                if (match) {
+                    matchedDevices.push({
+                        deviceId: alert.deviceId,
+                        firebaseToken: alert.firebaseToken,
+                        distanceInMiles: devices.find(d => d.deviceId === alert.deviceId)?.distanceInMiles || 0
+                    });
+                }
+            }
+
+            console.log(`🎯 Devices matched by keywords: ${matchedDevices.length}`);
+
+            if (!matchedDevices.length) return;
+
+
+            const finalDevices = matchedDevices.filter(d => d.deviceId !== user.deviceId);
+            const tokens = finalDevices.map(d => d.firebaseToken).filter(Boolean);
+
+            // const tokens = devices.filter(d => d.deviceId !== user.deviceId).map(d => d.firebaseToken); ///remove user
+            // const tokens = devices.map((d: any) => d.firebaseToken);
+
+            console.log('📲 Final tokens:', tokens);
+            for (const d of finalDevices) {
+                const distanceText = d.distanceInMiles ? `${d.distanceInMiles.toFixed(1)} miles away` : '';
+                await sendBulkPushNotification(
+                    [d.firebaseToken],
+                    `${item.name} posted near you 📍`,
+                    `${item.description} ${distanceText}`
+                );
+            }
+
+
+            // await sendBulkPushNotification(
+            //     tokens,
+            //     // '${item.name} Item Near You 📍',
+            //     `${item.name} posted near you 📍`,
+            //     `${item.description}`
+            // );
+
+        } catch (err: any) {
+            console.error('❌ Side effect error:', err.message);
+        }
+
+    }
+
+
 
 
     async getItemsNearLocation(deviceId: String, limit: number, offset: number) {

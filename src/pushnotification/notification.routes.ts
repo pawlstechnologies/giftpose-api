@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { getNotifications } from "./notification.controller";
+// import { getNotifications } from "./notification.controller";
 
 const router = Router();
 
 
-router.get('/:deviceId', getNotifications);
+// router.get('/:deviceId', getNotifications);
 export default router;
 
