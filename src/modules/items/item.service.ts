@@ -17,6 +17,8 @@ import { sendPostCreatedEmail } from "../../utils/email";
 import NotificationModels from "../notification/notification.models";
 import { LocationService } from "../location/location.service";
 import { sendBulkPushNotification } from "../../utils/push";
+import OpenAI from "openai";
+import { DeviceAlertModel } from "../alerts/alerts.model";
 
 
 
@@ -288,48 +290,102 @@ export default class ItemService {
 
 
 
+
     async handlePostSideEffects(user: any, item: any) {
+        try {
 
-        console.log('🚀 Running post side effects...');
+            console.log('🚀 Running post side effects...');
 
-        //notify user in-app notification
-        await NotificationModels.create({
-            deviceId: user.deviceId,
-            userId: user._id,
-            title: 'Item Posted',
-            message: `${item.name} is now live`,
-            data: { itemId: item._id }
-        });
-        console.log('🔔 In-app notification created');
-
-
-        //notify user by email 
-        await sendPostCreatedEmail(user.email, item);
-
-        console.log('📧 Email sent to:', user.email);
+            //notify user in-app notification
+            await NotificationModels.create({
+                deviceId: user.deviceId,
+                userId: user._id,
+                title: 'Item Posted',
+                message: `${item.name} is now live`,
+                data: { itemId: item._id }
+            });
+            console.log('🔔 In-app notification created');
 
 
+            //notify user by email 
+            // await sendPostCreatedEmail(user.email, item);
 
-        const locationService = new LocationService();
+            console.log('📧 Email sent to:', user.email);
 
-        const devices = await locationService.getDevicesNearItem(
-            item.location.coordinates[0], // lng
-            item.location.coordinates[1]  // lat
-        );
 
-        const tokens = devices.filter(d => d.deviceId !== user.deviceId).map(d => d.firebaseToken); ///remove user
-        // const tokens = devices.map((d: any) => d.firebaseToken);
 
-        console.log('📲 Final tokens:', tokens);
+            const locationService = new LocationService();
 
-        await sendBulkPushNotification(
-            tokens,
-            // '${item.name} Item Near You 📍',
-            `${item.name} posted near you 📍`,
-            `${item.description}`
-        );
+            const devices = await locationService.getDevicesNearItem(
+                item.location.coordinates[0], // lng
+                item.location.coordinates[1]  // lat
+            );
+
+
+            if (!devices.length) return;
+            //fetch keywords
+            const deviceIds = devices.map((d: any) => d.deviceId);
+            const alerts = await DeviceAlertModel.find({
+                status: 'Active',
+                deviceId: { $in: deviceIds }
+            });
+
+            console.log(`🎯 Keyword alerts fetched: ${alerts.length}`);
+
+            if (!alerts.length) return;
+
+
+            // --- 4️⃣ AI semantic matching ---
+            const matchedDevices: any[] = [];
+            const itemText = `${item.name} ${item.description || ''}`;
+
+            for (const alert of alerts) {
+                const match = await OpenAIClient.isItemMatchingKeywords(itemText, alert.keywords, 0.6);
+                if (match) {
+                    matchedDevices.push({
+                        deviceId: alert.deviceId,
+                        firebaseToken: alert.firebaseToken,
+                        distanceInMiles: devices.find(d => d.deviceId === alert.deviceId)?.distanceInMiles || 0
+                    });
+                }
+            }
+
+            console.log(`🎯 Devices matched by keywords: ${matchedDevices.length}`);
+
+            if (!matchedDevices.length) return;
+
+
+            const finalDevices = matchedDevices.filter(d => d.deviceId !== user.deviceId);
+            const tokens = finalDevices.map(d => d.firebaseToken).filter(Boolean);
+
+            // const tokens = devices.filter(d => d.deviceId !== user.deviceId).map(d => d.firebaseToken); ///remove user
+            // const tokens = devices.map((d: any) => d.firebaseToken);
+
+            console.log('📲 Final tokens:', tokens);
+            for (const d of finalDevices) {
+                const distanceText = d.distanceInMiles ? `${d.distanceInMiles.toFixed(1)} miles away` : '';
+                await sendBulkPushNotification(
+                    [d.firebaseToken],
+                    `${item.name} posted near you 📍`,
+                    `${item.description} ${distanceText}`
+                );
+            }
+
+
+            // await sendBulkPushNotification(
+            //     tokens,
+            //     // '${item.name} Item Near You 📍',
+            //     `${item.name} posted near you 📍`,
+            //     `${item.description}`
+            // );
+
+        } catch (err: any) {
+            console.error('❌ Side effect error:', err.message);
+        }
 
     }
+
+
 
 
     async getItemsNearLocation(deviceId: String, limit: number, offset: number) {

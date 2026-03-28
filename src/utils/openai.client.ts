@@ -1,4 +1,7 @@
 import axios from "axios";
+import OpenAI from "openai";
+
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export default class OpenAIClient {
 
@@ -7,7 +10,7 @@ export default class OpenAIClient {
         taxonomy: any
     ) {
 
-         const prompt = `
+        const prompt = `
 You are an intelligent product analysis and categorisation AI.
 
 Your task is to analyse the provided item (title, description, and images) and:
@@ -77,37 +80,37 @@ IMPORTANT:
 `;
 
 
-//         const prompt = `
-// You are a product categorisation AI.
+        //         const prompt = `
+        // You are a product categorisation AI.
 
-// Using the item title, description, and image, classify it into:
+        // Using the item title, description, and image, classify it into:
 
-// - category
-// - subcategory
-// - content
+        // - category
+        // - subcategory
+        // - content
 
-// Use the provided taxonomy.
+        // Use the provided taxonomy.
 
-// If none fits, suggest new ones.
+        // If none fits, suggest new ones.
 
-// Return JSON only.
+        // Return JSON only.
 
-// {
-//  "category": "",
-//  "subcategory": "",
-//  "content": "",
-//  "suggestedCategory": "",
-//  "suggestedSubcategory": "",
-//  "suggestedContent": ""
-// }
+        // {
+        //  "category": "",
+        //  "subcategory": "",
+        //  "content": "",
+        //  "suggestedCategory": "",
+        //  "suggestedSubcategory": "",
+        //  "suggestedContent": ""
+        // }
 
-// ITEM
-// Title: ${item.title}
-// Description: ${item.description}
+        // ITEM
+        // Title: ${item.title}
+        // Description: ${item.description}
 
-// TAXONOMY
-// ${JSON.stringify(taxonomy)}
-// `;
+        // TAXONOMY
+        // ${JSON.stringify(taxonomy)}
+        // `;
 
         const messageContent: any[] = [
             {
@@ -157,7 +160,7 @@ IMPORTANT:
     }
 
 
-     static async imageCategorisatiion(
+    static async imageCategorisatiion(
         item: { title: string; description: string; image?: string; images?: string[]; },
         taxonomy: any
     ) {
@@ -165,7 +168,7 @@ IMPORTANT:
 
         try {
 
-             const prompt = `
+            const prompt = `
 You are an intelligent product analysis and categorisation AI.
 
 Your task is to analyse the provided item (title, description, and images) and:
@@ -236,121 +239,130 @@ IMPORTANT:
 
 
 
-//       const prompt = `
-// You are a product categorisation AI.
+            // ✅ Build message content
+            const messageContent: any[] = [
+                {
+                    type: "text",
+                    text: prompt
+                }
+            ];
 
-// Using the item title, description, and images, classify it into:
-
-// Com up with the name and description of the images attached
-
-// - category
-// - subcategory
-// - content
-
-// Use the provided taxonomy strictly.
-
-// If none fits, suggest new ones.
-
-// Return JSON only.
-
-// {
-//   "category": "",
-//   "subcategory": "",
-//   "content": "",
-//   "suggestedCategory": "",
-//   "suggestedSubcategory": "",
-//   "suggestedContent": "",
-//   "title": "",
-//   "description": ""
-// }
-
-// ITEM
-// Title: ${item.title || "Unknown"}
-// Description: ${item.description || "Analyse from images"}
-
-// TAXONOMY
-// ${JSON.stringify(taxonomy)}
-// `;
-
-      // ✅ Build message content
-      const messageContent: any[] = [
-        {
-          type: "text",
-          text: prompt
-        }
-      ];
-
-      // ✅ Add multiple images if provided
-      if (item.images && item.images.length > 0) {
-        item.images.forEach((url) => {
-          messageContent.push({
-            type: "image_url",
-            image_url: {
-              url
+            // ✅ Add multiple images if provided
+            if (item.images && item.images.length > 0) {
+                item.images.forEach((url) => {
+                    messageContent.push({
+                        type: "image_url",
+                        image_url: {
+                            url
+                        }
+                    });
+                });
             }
-          });
-        });
-      }
-      // ✅ Fallback to single image
-      else if (item.image) {
-        messageContent.push({
-          type: "image_url",
-          image_url: {
-            url: item.image
-          }
-        });
-      }
-
-      // 🚨 IMPORTANT: image URLs must be PUBLIC (not localhost)
-
-      const response = await axios.post(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          model: "gpt-4o",
-          messages: [
-            {
-              role: "user",
-              content: messageContent
+            // ✅ Fallback to single image
+            else if (item.image) {
+                messageContent.push({
+                    type: "image_url",
+                    image_url: {
+                        url: item.image
+                    }
+                });
             }
-          ],
-          temperature: 0.2
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-            "Content-Type": "application/json"
-          }
+
+            // 🚨 IMPORTANT: image URLs must be PUBLIC (not localhost)
+
+            const response = await axios.post(
+                "https://api.openai.com/v1/chat/completions",
+                {
+                    model: "gpt-4o",
+                    messages: [
+                        {
+                            role: "user",
+                            content: messageContent
+                        }
+                    ],
+                    temperature: 0.2
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+
+            let text = response.data.choices[0].message.content;
+
+            // ✅ Clean AI response (remove ```json blocks)
+            const cleaned = text
+                .replace(/```json/g, "")
+                .replace(/```/g, "")
+                .trim();
+
+            // ✅ Parse safely
+            let parsed;
+            try {
+                parsed = JSON.parse(cleaned);
+            } catch (err) {
+                console.error("❌ JSON Parse Error:", cleaned);
+                throw new Error("AI returned invalid JSON");
+            }
+
+            return parsed;
+
+        } catch (err: any) {
+            console.error(
+                "❌ OpenAI Error:",
+                err.response?.data || err.message
+            );
+            throw new Error("AI categorisation failed");
         }
-      );
 
-      let text = response.data.choices[0].message.content;
 
-      // ✅ Clean AI response (remove ```json blocks)
-      const cleaned = text
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
-
-      // ✅ Parse safely
-      let parsed;
-      try {
-        parsed = JSON.parse(cleaned);
-      } catch (err) {
-        console.error("❌ JSON Parse Error:", cleaned);
-        throw new Error("AI returned invalid JSON");
-      }
-
-      return parsed;
-
-    } catch (err: any) {
-      console.error(
-        "❌ OpenAI Error:",
-        err.response?.data || err.message
-      );
-      throw new Error("AI categorisation failed");
     }
 
 
+
+    static async isItemMatchingKeywords(
+        itemText: string,
+        keywords: string[],
+        threshold = 0.7
+    ): Promise<boolean> {
+        if (!keywords.length) return false;
+
+        const keywordText = keywords.join(" ");
+
+        // Generate embeddings for item and keywords
+        const [itemEmbedding, keywordEmbedding] = await Promise.all([
+            client.embeddings.create({
+                model: "text-embedding-3-large",
+                input: itemText
+            }),
+            client.embeddings.create({
+                model: "text-embedding-3-large",
+                input: keywordText
+            })
+        ]);
+
+        // Cosine similarity
+        const cosineSimilarity = (a: number[], b: number[]) => {
+            const dot = a.reduce((sum, val, i) => sum + val * b[i], 0);
+            const magA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+            const magB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+            return dot / (magA * magB);
+        };
+
+        const similarity = cosineSimilarity(
+            itemEmbedding.data[0].embedding,
+            keywordEmbedding.data[0].embedding
+        );
+
+        console.log('🧠 AI similarity score:', similarity);
+
+        return similarity >= threshold;
     }
+
+
+
+
 }
 
