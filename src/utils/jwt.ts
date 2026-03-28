@@ -8,7 +8,7 @@ export const generateToken = (payload: object) => {
 
 export const generateAccessToken = (payload: object) => {
   return jwt.sign(payload, process.env.JWT_SECRET!, {
-    expiresIn: '15m'
+    expiresIn: '10d'
   });
 };
 
