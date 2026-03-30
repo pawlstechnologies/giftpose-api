@@ -7,6 +7,7 @@ dist/
 
 # Firbase
 src/firebase-service-account.json
+src/serviceAccountKey.json
 
 # Environment variables
 .env
