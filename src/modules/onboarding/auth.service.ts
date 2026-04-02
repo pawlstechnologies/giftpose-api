@@ -66,11 +66,10 @@ export class AuthService {
         const user = await UserModel.findOne({
             $or: [{ email: identifier }, { username: identifier }]
         });
+        if (!user) throw new ApiError(433, 'Invalid username or password');
 
-        if (!user) throw new ApiError(433, 'Invalid credentials');
         const isMatch = await comparePassword(password, user.password);
-
-        if (!isMatch) throw new ApiError(433, 'Invalid credentials');
+        if (!isMatch) throw new ApiError(433, 'Invalid username or password');
 
         if (!user.isVerified) {
             throw new ApiError(433, 'Please verify your email first');
