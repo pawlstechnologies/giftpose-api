@@ -1,5 +1,6 @@
 export default class ApiError extends Error {
   statusCode: number;
+  status: boolean;
   isOperational: boolean;
   errors?: any;
 
@@ -7,6 +8,7 @@ export default class ApiError extends Error {
     super(message);
 
     this.statusCode = statusCode;
+    this.status = false; // ✅ ADD THIS
     this.errors = errors;
     this.isOperational = true;
 

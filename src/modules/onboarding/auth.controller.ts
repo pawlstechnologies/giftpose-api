@@ -24,14 +24,19 @@ export const register = async (req: Request, res: Response) => {
 
 export const login = async (req: Request, res: Response) => {
     try {
-        // const result = await authService.login(req.body);
-        const { accessToken, user } = await authService.login(req.body);
-        res.status(201).json({
-            status: true,
-            message: 'User Logged In Successfully',
-            token: accessToken,
-            data: user,
+        const result = await authService.login(req.body);
+        return res.status(result.statusCode).json({
+            status: result.status,
+            message: result.message,
+            ...(result.data && { data: result.data })
         });
+        // const { accessToken, user } = await authService.login(req.body);
+        // res.status(201).json({
+        //     status: true,
+        //     message: 'User Logged In Successfully',
+        //     token: accessToken,
+        //     data: user,
+        // });
     } catch (error: any) {
         res.status(error.statusCode || 500).json({ message: error.message });
     }
@@ -85,11 +90,11 @@ export const forgotPassword = async (req: Request, res: Response) => {
             });
         }
 
-       const result =  await authService.forgotPassword(email);
+        const result = await authService.forgotPassword(email);
 
-    //    return res.status(200).json(result);
+        //    return res.status(200).json(result);
         return res.status(200).json({
-             status: true,
+            status: true,
             message: 'If this email exists, a reset code has been sent'
         });
 
@@ -132,11 +137,11 @@ export const resetPassword = async (req: Request, res: Response) => {
         }
 
         const result = await authService.resetPassword(email,
-      code,
-      newPassword);
+            code,
+            newPassword);
 
-      return res.status(201).json({
-         status: true,
+        return res.status(201).json({
+            status: true,
             message: 'Password Reset Completed',
             data: result
         });

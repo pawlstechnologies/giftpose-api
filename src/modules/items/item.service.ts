@@ -383,7 +383,7 @@ export default class ItemService {
 
 
             //notify user by email 
-            // await sendPostCreatedEmail(user.email, item);
+            await sendPostCreatedEmail(user.email, item);
 
             console.log('📧 Email sent to:', user.email);
 

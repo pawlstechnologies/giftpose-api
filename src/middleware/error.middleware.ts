@@ -14,7 +14,7 @@ export const errorHandler = (
   // Custom API error
   if (err instanceof ApiError) {
     return res.status(err.statusCode).json({
-      success: false,
+      status: false,
       message: err.message,
       errors: err.errors ?? null,
       ...(isDev && { stack: err.stack })
@@ -25,7 +25,7 @@ export const errorHandler = (
   console.error("UNEXPECTED ERROR:", err);
 
   return res.status(500).json({
-    success: false,
+    status: false,
     message: "Internal Server Error",
     ...(isDev && { stack: err.stack })
   });

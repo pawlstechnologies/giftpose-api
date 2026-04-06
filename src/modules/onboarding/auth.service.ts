@@ -61,41 +61,86 @@ export class AuthService {
     }
 
     async login(data: LoginDTO) {
-        const { identifier, password } = data;
+        try {
+            const { identifier, password } = data;
 
-        const user = await UserModel.findOne({
-            $or: [{ email: identifier }, { username: identifier }]
-        });
-        if (!user) throw new ApiError(433, 'Invalid username or password');
+            const user = await UserModel.findOne({
+                $or: [{ email: identifier }, { username: identifier }]
+            });
 
-        const isMatch = await comparePassword(password, user.password);
-        if (!isMatch) throw new ApiError(433, 'Invalid username or password');
-
-        if (!user.isVerified) {
-            throw new ApiError(433, 'Please verify your email first');
-        }
-
-        // const token = generateToken({
-        //     id: user._id,
-        //     email: user.email
-        // });
-
-        const accessToken = generateAccessToken({ id: user._id, email: user.email });
-        const refreshToken = generateRefreshToken({ id: user._id });
-
-        user.refreshToken = refreshToken;
-        await user.save();
-
-        return {
-            accessToken,
-            refreshToken,
-            user: {
-                id: user._id,
-                fullname: user.fullname,
-                email: user.email,
-                username: user.username
+            // if (!user) throw new ApiError(401,  'Invalid username or password____', );
+            if (!user) {
+                return {
+                    status: false,
+                    statusCode: 401,
+                    message: 'Invalid username or password',
+                };
             }
-        };
+
+            const isMatch = await comparePassword(password, user.password);
+            if (!isMatch) {
+                return {
+                    status: false,
+                    statusCode: 401,
+                    message: 'Invalid username or password',
+                };
+            }
+
+            if (!user.isVerified) {
+                return {
+                    status: false,
+                    statusCode: 403,
+                    message: 'Please verify your email first',
+                };
+            }
+
+            // const token = generateToken({
+            //     id: user._id,
+            //     email: user.email
+            // });
+
+            const accessToken = generateAccessToken({ id: user._id, email: user.email });
+            const refreshToken = generateRefreshToken({ id: user._id });
+
+            user.refreshToken = refreshToken;
+            await user.save();
+
+            return {
+                status: true,
+                statusCode: 200,
+                message: 'Login successful',
+                data: {
+                    accessToken,
+                    refreshToken,
+                    user: {
+                        id: user._id,
+                        fullname: user.fullname,
+                        email: user.email,
+                        username: user.username
+                    }
+                }
+            };
+
+
+            // return {
+            //     accessToken,
+            //     refreshToken,
+            //     user: {
+            //         id: user._id,
+            //         fullname: user.fullname,
+            //         email: user.email,
+            //         username: user.username
+            //     }
+            // };
+        } catch (error) {
+            console.error(error);
+
+            return {
+                status: false,
+                statusCode: 500,
+                message: 'Something went wrong',
+            };
+        }
 
 
     }
@@ -189,7 +234,7 @@ export class AuthService {
     async resetPassword(email: string,
         code: string,
         newPassword: string) {
-     
+
         const user = await UserModel.findOne({ email });
 
         if (!user) throw new ApiError(404, 'Invalid token');

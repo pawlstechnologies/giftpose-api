@@ -11,19 +11,29 @@ import alertRoutes from './modules/alerts/alerts.routes';
 import notificationRoutes from './modules/notification/notification.routes'
 import authRoutes from './modules/onboarding/auth.routes';
 import userRoutes from './modules/user/user.routes';
+import adminAuthRoutes from './admin/auth/admin.routes';
 import { errorHandler } from "./middleware/error.middleware";
 import { globalLimiter, helmetMiddleware } from "./middleware/security";
 
 
 const app = express();
 
-app.use(cors());
+// app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(cookieParser());
 app.use(helmetMiddleware);
 app.use(globalLimiter);
 
+
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL, // frontend URL
+    credentials: true,               // allow cookies/headers
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  })
+);
 
 
 app.get("/api", (_req, res) => {
@@ -40,6 +50,11 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/auth", authRoutes);
 
 app.use("/api/user", userRoutes);
+
+
+
+////admin routes
+app.use("/api/admin/auth", adminAuthRoutes);
 
 
 app.use(errorHandler); //handles error globally
