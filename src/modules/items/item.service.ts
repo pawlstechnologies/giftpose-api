@@ -115,37 +115,112 @@ export default class ItemService {
             }
         }
 
-
         return {
             name: ai.title || ai.content || "Generated Item",
             description: ai.description || ai.content,
 
-            category: ai.category || "",
-            categoryId: category?._id || null,
+            category: category
+                ? {
+                    _id: category._id,
+                    name: category.name,
+                    slug: category.slug,
+                    status: category.status,
 
-            subcategory: ai.subcategory || "",
-            subcategoryId: subcategory?._id || null,
+                    subcategories: subcategory
+                        ? [
+                            {
+                                _id: subcategory._id,
+                                name: subcategory.name,
+                                categoryId: subcategory.categoryId,
+                                status: subcategory.status,
+                                slug: subcategory.slug,
 
-            content: ai.content || "",
-            contentId: content?._id || null,
+                                contents: content
+                                    ? [
+                                        {
+                                            _id: content._id,
+                                            name: content.name,
+                                            status: content.status,
+                                            subcategoryId: content.subcategoryId,
+                                            slug: content.slug
+                                        }
+                                    ]
+                                    : []
+                            }
+                        ]
+                        : []
+                }
+                : null,
 
+            // 🔥 Suggested (same structure)
+            suggestedCategory: suggestedCategoryDoc
+                ? {
+                    _id: suggestedCategoryDoc._id,
+                    name: suggestedCategoryDoc.name,
+                    slug: suggestedCategoryDoc.slug,
+                    status: suggestedCategoryDoc.status,
 
-            // suggestedCategory: ai.suggestedCategory || "",
-            // suggestedSubcategory: ai.suggestedSubcategory || "",
-            // suggestedContent: ai.suggestedContent || "",
+                    subcategories: suggestedSubcategoryDoc
+                        ? [
+                            {
+                                _id: suggestedSubcategoryDoc._id,
+                                name: suggestedSubcategoryDoc.name,
+                                categoryId: suggestedSubcategoryDoc.categoryId,
+                                status: suggestedSubcategoryDoc.status,
+                                slug: suggestedSubcategoryDoc.slug,
 
-
-            suggestedCategory: ai.suggestedCategory || "",
-            suggestedCategoryId: suggestedCategoryDoc?._id || null,
-
-            suggestedSubcategory: ai.suggestedSubcategory || "",
-            suggestedSubcategoryId: suggestedSubcategoryDoc?._id || null,
-
-            suggestedContent: ai.suggestedContent || "",
-            suggestedContentId: suggestedContentDoc?._id || null,
+                                contents: suggestedContentDoc
+                                    ? [
+                                        {
+                                            _id: suggestedContentDoc._id,
+                                            name: suggestedContentDoc.name,
+                                            status: suggestedContentDoc.status,
+                                            subcategoryId: suggestedContentDoc.subcategoryId,
+                                            slug: suggestedContentDoc.slug
+                                        }
+                                    ]
+                                    : []
+                            }
+                        ]
+                        : []
+                }
+                : null,
 
             images: imageUrls
         };
+
+
+
+        // return {
+        //     name: ai.title || ai.content || "Generated Item",
+        //     description: ai.description || ai.content,
+
+        //     category: ai.category || "",
+        //     categoryId: category?._id || null,
+
+        //     subcategory: ai.subcategory || "",
+        //     subcategoryId: subcategory?._id || null,
+
+        //     content: ai.content || "",
+        //     contentId: content?._id || null,
+
+
+        //     // suggestedCategory: ai.suggestedCategory || "",
+        //     // suggestedSubcategory: ai.suggestedSubcategory || "",
+        //     // suggestedContent: ai.suggestedContent || "",
+
+
+        //     suggestedCategory: ai.suggestedCategory || "",
+        //     suggestedCategoryId: suggestedCategoryDoc?._id || null,
+
+        //     suggestedSubcategory: ai.suggestedSubcategory || "",
+        //     suggestedSubcategoryId: suggestedSubcategoryDoc?._id || null,
+
+        //     suggestedContent: ai.suggestedContent || "",
+        //     suggestedContentId: suggestedContentDoc?._id || null,
+
+        //     images: imageUrls
+        // };
 
     }
 
