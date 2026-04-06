@@ -48,54 +48,6 @@ export class AdminAuthService {
             adminId: admin._id
         };
 
-
-
-
-
-        /**
-         * 🔐 CASE 1: MFA ALREADY ENABLED
-         * → Ask for OTP verification
-         */
-        // if (admin.mfaEnabled) {
-        //     return {
-        //         requiresMFA: true,
-        //         adminId: admin._id,
-        //         email: admin.email,
-        //         role: admin.role
-        //     };
-        // }
-
-        /**
-         * ⚠️ CASE 2: MFA NOT ENABLED
-         * → Generate secret ONCE and return QR for setup
-         */
-        // if (!admin.mfaSecret) {
-        //     const secret = speakeasy.generateSecret({
-        //         name: `GiftPose Admin (${admin.email})`
-        //     });
-
-        //     admin.mfaSecret = secret.base32;
-        //     await admin.save();
-
-        //     return {
-        //         requiresMFASetup: true,
-        //         qrCode: secret.otpauth_url,
-        //         adminId: admin._id,
-        //         email: admin.email,
-        //         role: admin.role
-        //     };
-        // }
-
-        /**
-         * ⚠️ CASE 3: Secret exists but MFA not verified yet
-         * → Continue setup (no new secret!)
-         */
-        // return {
-        //     requiresMFASetup: true,
-        //     adminId: admin._id,
-        //     email: admin.email,
-        //     role: admin.role
-        // };
     }
 
     static async verifyOTP(adminId: string, otp: string) {
