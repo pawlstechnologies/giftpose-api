@@ -1,11 +1,11 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import speakeasy from 'speakeasy';
+// import speakeasy from 'speakeasy';
 
 import crypto from 'crypto'
 
 import { AdminModel } from './admin.model';
-import { token } from 'morgan';
+// import { token } from 'morgan';
 import { sendVerificationEmail } from '../../utils/email';
 
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -153,7 +153,7 @@ export class AdminAuthService {
                 role: admin.role
             }
         };
-        
+
         // return {
         //     accessToken,
         //     refreshToken
