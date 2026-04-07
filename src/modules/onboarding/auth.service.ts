@@ -18,12 +18,22 @@ export class AuthService {
         const location = await LocationModel.findOne({ deviceId });
 
         if (!location) {
-            throw new ApiError(404, 'Device not found');
+            return {
+                status: false,
+                statusCode: 404,
+                message: 'Device not found. Please register your location first.',
+            };
+            //throw new ApiError(404, 'Device not found');
         }
 
 
         if (password !== confirmPassword) {
-            throw new ApiError(433, 'Passwords do not match');
+            return {
+                status: false,
+                statusCode: 401,
+                message: 'Passwords do not match',
+            };
+            // throw new ApiError(433, 'Passwords do not match');
         }
 
         const existingUser = await UserModel.findOne({
@@ -31,7 +41,12 @@ export class AuthService {
         });
 
         if (existingUser) {
-            throw new ApiError(433, 'Email or username already exists');
+            return {
+                status: false,
+                statusCode: 401,
+                message: 'Email or username already exists',
+            };
+            //throw new ApiError(433, 'Email or username already exists');
         }
 
         const hashedPassword = await hashPassword(password);
@@ -149,7 +164,12 @@ export class AuthService {
         const user = await UserModel.findById(userId);
 
         if (!user || user.refreshToken !== token) {
-            throw new Error('Invalid refresh token');
+            return {
+                status: false,
+                statusCode: 401,
+                message: 'Invalid refresh token',
+            };
+            // throw new Error('Invalid refresh token');
         }
 
         const accessToken = generateAccessToken({ id: user._id });
@@ -162,8 +182,20 @@ export class AuthService {
     async resendVerification(email: string) {
         const user = await UserModel.findOne({ email });
 
-        if (!user) throw new ApiError(404, 'User not found');
-        if (user.isVerified) throw new ApiError(433, 'Already verified');
+        if (!user) {
+            return {
+                status: false,
+                statusCode: 404,
+                message: 'User not found',
+            };
+        }
+        if (user.isVerified) {
+            return {
+                status: false,
+                statusCode: 433,
+                message: 'Already verified',
+            };
+        }
 
         const code = generateVerificationCode();
 
@@ -177,7 +209,13 @@ export class AuthService {
 
         await sendVerificationEmail(email, code);
 
-        return { message: 'Verification code resent' };
+        return {
+            status: true,
+            statusCode: 200,
+            message: 'Verification code resent',
+        };
+
+        // return { message: 'Verification code resent' };
     }
 
 
@@ -187,14 +225,30 @@ export class AuthService {
 
         const user = await UserModel.findOne({ email });
 
-        if (!user) throw new ApiError(404, 'User not found');
+        if (!user) {
+            return {
+                status: false,
+                statusCode: 404,
+                message: 'User not found',
+            };
+        }
+            
+            //throw new ApiError(404, 'User not found');
 
         if (user.verificationCode !== code) {
-            throw new ApiError(404, 'Invalid code');
+            return {
+                status: false,
+                statusCode: 404,
+                message: 'Invalid code',
+            };
         }
 
         if (user.verificationCodeExpires! < new Date()) {
-            throw new ApiError(433, 'Code expired');
+            return {
+                status: false,
+                statusCode: 433,
+                message: 'Code expired',
+            };
         }
 
         user.isVerified = true;
@@ -202,14 +256,25 @@ export class AuthService {
         user.verificationCodeExpires = undefined;
 
         await user.save();
+        return {
+            status: true,
+            statusCode: 200,
+            message: 'Email verified successfully',
+        };
 
-        return { message: 'Email verified successfully' };
+        // return { message: 'Email verified successfully' };
     }
 
     async forgotPassword(email: string) {
         const user = await UserModel.findOne({ email });
 
-        if (!user) throw new ApiError(404, 'User not found');
+        if (!user) {
+            return {
+                status: false,
+                statusCode: 404,
+                message: 'User not found',
+            };
+        }
 
         // const rawToken = crypto.randomBytes(32).toString('hex');
         // const hashedToken = crypto
@@ -228,7 +293,11 @@ export class AuthService {
 
         await sendResetPasswordCodeEmail(email, code);
 
-        return { message: 'Password Reset code sent' };
+        return {
+            status: true,
+            statusCode: 200,
+            message: 'Password Reset code sent',
+        };
     }
 
     async resetPassword(email: string,
@@ -237,18 +306,36 @@ export class AuthService {
 
         const user = await UserModel.findOne({ email });
 
-        if (!user) throw new ApiError(404, 'Invalid token');
+        if (!user) {    
+            return {
+                status: false,
+                statusCode: 404,
+                message: 'User not found',
+            };
+        }
 
         if (user.resetPasswordExpires! < new Date()) {
-            throw new ApiError(433, 'Token expired');
+            return {
+                status: false,
+                statusCode: 433,
+                message: 'Token expired',
+            };
         }
 
         if (user.resetPasswordCode !== code) {
-            throw new ApiError(433, 'Invalid code');
+            return {
+                status: false,
+                statusCode: 433,
+                message: 'Invalid code',
+            };
         }
 
         if (user.resetPasswordExpires! < new Date()) {
-            throw new ApiError(433, 'Code expired');
+            return {
+                status: false,
+                statusCode: 433,
+                message: 'Code expired',
+            };
         }
 
 
@@ -265,28 +352,50 @@ export class AuthService {
 
         await user.save();
 
-        return { message: 'Password reset successful' };
+        return {
+            status: true,
+            statusCode: 200,
+            message: 'Password reset successful',
+        };
     }
 
 
-     async deleteUser(email: string) {
-         const user = await UserModel.findOneAndDelete({ email });
-         if (!user) throw new ApiError(404, 'User not found');
-         return { message: 'User deleted successfully' };
-     }
+    async deleteUser(email: string) {
+        const user = await UserModel.findOneAndDelete({ email });
+        if (!user) {
+            return {
+                status: false,
+                statusCode: 404,
+                message: 'User not found',
+            };
+        }
+        return {
+            status: true,
+            statusCode: 200,
+            message: 'User deleted successfully',
+        };
+    }
 
     async logout(userId: string) {
         const user = await UserModel.findById(userId);
 
         if (!user) {
-            throw new ApiError(404, 'User not found');
+            return {
+                status: false,
+                statusCode: 404,
+                message: 'User not found',
+            };
         }
 
         // Invalidate refresh token
         user.refreshToken = undefined;
         await user.save();
 
-        return { message: 'Logged out successfully' };
+        return {
+            status: true,
+            statusCode: 200,
+            message: 'Logged out successfully',
+        };
     }
 
 }
