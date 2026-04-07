@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 
 import NotificationService from "./notification.service";
+import { stat } from "node:fs";
 
 interface Params {
   deviceId: string;
@@ -17,6 +18,7 @@ export const getNotifications = async (req: Request<Params>, res: Response) => {
         );
 
         res.status(200).json({
+            status: true,
             message: 'Notifications fetched successfully',
             data
         });
@@ -36,6 +38,7 @@ export const markNotificationAsRead = async (req: Request<Params>, res: Response
         const data = await NotificationService.markAsRead(notificationId);
 
         res.status(200).json({
+            status: true,
             message: 'Notification marked as read',
             data
         });
@@ -51,6 +54,7 @@ export const markAllNotificationsAsRead = async (req: Request<Params>, res: Resp
         const data = await NotificationService.markAllAsRead(deviceId);
 
         res.status(200).json({
+            status: true,
             message: data.message
         });
     } catch (error: any) {
