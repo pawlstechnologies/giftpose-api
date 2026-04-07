@@ -12,9 +12,7 @@ export const register = async (req: Request, res: Response) => {
         //     await authService.login(req.body);
         // setAuthCookies(res, accessToken, refreshToken);
 
-        res.status(201).json({
-            status: true,
-            message: 'User Created Successfully. Kindly verify email address',
+        res.status(result.statusCode).json({
             data: result,
         });
     } catch (error: any) {
@@ -45,9 +43,10 @@ export const login = async (req: Request, res: Response) => {
 export const verifyEmail = async (req: Request, res: Response) => {
     try {
         const result = await authService.verifyEmail(req.body);
-        res.status(201).json({
-            status: true,
-            message: 'User Verification Successful',
+        
+        res.status(result.statusCode).json({
+            // status: true,
+            // message: 'User Verification Successful',
             data: result,
         });
     } catch (error: any) {
@@ -68,8 +67,8 @@ export const resendEmailVerificatioin = async (req: Request, res: Response) => {
         }
 
         const result = await authService.resendVerification(email);
-        res.status(200).json({
-            status: true,
+        res.status(result.statusCode).json({
+            // status: true,
             // message: 'User Verification Resent Successfully',
             data: result,
         });
@@ -93,9 +92,10 @@ export const forgotPassword = async (req: Request, res: Response) => {
         const result = await authService.forgotPassword(email);
 
         //    return res.status(200).json(result);
-        return res.status(200).json({
-            status: true,
-            message: 'If this email exists, a reset code has been sent'
+        return res.status(result.statusCode).json({
+            data: result
+            // status: true,
+            // message: 'If this email exists, a reset code has been sent'
         });
 
     } catch (err: any) {

@@ -66,6 +66,9 @@ export class AuthService {
         await sendVerificationEmail(email, code);
 
         return {
+             status: false,
+                statusCode: 401,
+                message: 'Email or username already exists',
             // message: 'User created. Verify email.',
             userId: user._id,
             fullname: user.fullname,
@@ -129,6 +132,7 @@ export class AuthService {
                     refreshToken,
                     user: {
                         id: user._id,
+                        // deviceId: user.deviceId,
                         fullname: user.fullname,
                         email: user.email,
                         username: user.username
