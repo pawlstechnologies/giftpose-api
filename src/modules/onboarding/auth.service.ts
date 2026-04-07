@@ -269,6 +269,11 @@ export class AuthService {
     }
 
 
+     async deleteUser(email: string) {
+         const user = await UserModel.findOneAndDelete({ email });
+         if (!user) throw new ApiError(404, 'User not found');
+         return { message: 'User deleted successfully' };
+     }
 
     async logout(userId: string) {
         const user = await UserModel.findById(userId);

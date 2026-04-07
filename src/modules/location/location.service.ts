@@ -177,5 +177,13 @@ export class LocationService {
         return items;
     }
 
+    async deleteLocationByDeviceId(deviceId: string) {
+        const deleted = await LocationModel.findOneAndDelete({ deviceId });
+        if (!deleted) {
+            throw new ApiError(404, 'Location not found for the provided device ID');
+        }
+        return { message: 'Location deleted successfully' };
+    }   
+
 
 }

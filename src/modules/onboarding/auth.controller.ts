@@ -155,6 +155,27 @@ export const resetPassword = async (req: Request, res: Response) => {
     }
 }
 
+export const deleteUser = async (req: Request, res: Response) => {
+
+    try {
+        const email = req.body.email;
+
+        const result = await authService.deleteUser(email);
+
+        return res.status(200).json({
+            status: true,
+            message: 'User Deleted Successfully',
+            data: result
+        });
+
+    } catch (err: any) {
+        return res.status(400).json({
+            message: err.message
+        });
+    }
+
+}
+
 export const logout = async (req: AuthRequest, res: Response) => {
 
 

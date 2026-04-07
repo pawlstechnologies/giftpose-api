@@ -88,5 +88,27 @@ export const listAllLocation = async (req: Request, res: Response, next: NextFun
   }
 };
 
+export const deleteLocationByDeviceId = async (req: Request, res: Response) => {
+  const { deviceId } = req.body;
+
+  if (!deviceId?.trim()) {
+    return res.status(400).json({ message: 'Device ID is required' });
+  }
+
+  try {
+    const result = await locationService.deleteLocationByDeviceId(deviceId);
+    res.status(200).json({
+      status: true,
+      message: 'Location deleted successfully',
+      data: result
+    });
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({
+      status: false,
+      message: error.message || 'Failed to delete location'
+    });
+  }
+};
+
 
 
