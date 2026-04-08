@@ -12,9 +12,8 @@ export const register = async (req: Request, res: Response) => {
         //     await authService.login(req.body);
         // setAuthCookies(res, accessToken, refreshToken);
 
-        res.status(result.statusCode).json({
-            data: result,
-        });
+        res.status(result.statusCode).json(result);
+        
     } catch (error: any) {
         res.status(error.statusCode || 500).json({ message: error.message });
     }

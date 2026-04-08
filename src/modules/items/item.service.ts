@@ -377,6 +377,8 @@ export default class ItemService {
                 userId: user._id,
                 title: 'Item Posted',
                 message: `${item.name} is now live`,
+                type: 'Item_Posted',
+                img: item.thumbnail || 'https://res.cloudinary.com/dxfq3iotg/image/upload/v1692099205/giftpose/default-item.png',
                 data: { itemId: item._id }
             });
             console.log('🔔 In-app notification created');

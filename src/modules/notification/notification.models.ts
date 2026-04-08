@@ -8,6 +8,7 @@ const NotificationSchema = new Schema({
     message: String,
     type: { type: String, enum: ['Item_Posted', 'New_Item_Alert'], default: 'New_Item_Alert' },
     read: { type: Boolean, default: false },
+    img: { type: String, required: true },
     data: Object
 }, { timestamps: true });
 
