@@ -11,7 +11,6 @@ export const register = async (req: Request, res: Response) => {
         // const { accessToken, refreshToken, user } =
         //     await authService.login(req.body);
         // setAuthCookies(res, accessToken, refreshToken);
-
         res.status(result.statusCode).json(result);
         
     } catch (error: any) {

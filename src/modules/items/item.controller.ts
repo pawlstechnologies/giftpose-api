@@ -213,6 +213,44 @@ export const getItemById = async (req: Request<GetItemParams>, res: Response) =>
     }
 };
 
+export const markItemAsTaken = async (req: any, res: any) => {
+    const { itemId } = req.params;
+    const { deviceId } = req.body;
+
+    if (!deviceId) {
+        return res.status(400).json({
+            status: false,
+            message: "Device ID is required"
+        });
+    }
+
+    const result = await itemService.markItemAsTaken(itemId, deviceId);
+
+    return res.status(result.statusCode).json({
+        status: result.status,
+        message: result.message
+    });
+};
+
+export const hideItem = async (req: any, res: any) => {
+    const { itemId } = req.params;
+    const { deviceId } = req.body;
+
+    if (!deviceId) {
+        return res.status(400).json({
+            status: false,
+            message: "Device ID is required"
+        });
+    }
+
+    const result = await itemService.hideItem(itemId, deviceId);
+
+    return res.status(result.statusCode).json({
+        status: result.status,
+        message: result.message
+    });
+};
+
 
 
 export const listTrashNotingItems = async (req: Request, res: Response, next: NextFunction) => {

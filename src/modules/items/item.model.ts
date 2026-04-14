@@ -44,6 +44,14 @@ const itemSchema = new Schema<ItemModel>(
 
     partner: { type: String },
     isTaken: { type: Boolean, default: false },
+    takenByDevices: {
+      type: [String],
+      default: []
+    },
+    hiddenByDevices: {
+      type: [String],
+      default: []
+    },
 
     url: { type: String },
 

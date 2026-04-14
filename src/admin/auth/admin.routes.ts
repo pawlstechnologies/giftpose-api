@@ -13,15 +13,17 @@ router.use(ipWhitelistMiddleware);
 // 🔐 AUTH ROUTES
 router.post('/login', AdminController.login);
 router.post('/verify-otp', AdminController.verifyOTP);
+router.post('/logout', adminAuthMiddleware(), AdminController.logout);
 
 // 🔐 PROTECTED ROUTE EXAMPLE
+router.get('/me', adminAuthMiddleware(), AdminController.getMe);
+
 router.get(
     '/dashboard',
     adminAuthMiddleware(['super_admin', 'moderator']),
-    (req, res) => {
-        res.json({ message: 'Welcome Admin' });
-    }
+    AdminController.dashboard
 );
+
 
 export default router;
 

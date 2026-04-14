@@ -33,7 +33,7 @@ export class AdminAuthService {
         admin.loginAttempts = 0;
         admin.lockUntil = undefined;
 
-         const otp = crypto.randomInt(100000, 999999).toString();
+        const otp = crypto.randomInt(100000, 999999).toString();
         admin.otpCode = otp;
         admin.otpExpires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
         admin.otpAttempts = 0;
@@ -43,7 +43,7 @@ export class AdminAuthService {
 
         await admin.save();
 
-         return {
+        return {
             message: 'OTP sent to email',
             adminId: admin._id
         };
@@ -96,7 +96,7 @@ export class AdminAuthService {
         admin.lastLogin = new Date();
         admin.save();
 
-         return {
+        return {
             accessToken,
             refreshToken,
             admin: {
@@ -120,6 +120,45 @@ export class AdminAuthService {
         }
 
         await admin.save();
+    }
+
+    static async getMe(adminId: string) {
+        const admin = await AdminModel.findById(adminId).select('-password -refreshToken -otpCode -otpExpires');
+        if (!admin) throw new Error('Admin not found');
+
+        return {
+            id: admin._id,
+            email: admin.email,
+            role: admin.role,
+            lastLogin: admin.lastLogin
+        };
+    }
+
+    static async getDashboardData(adminId: string) {
+        // Placeholder for actual dashboard data fetching logic
+        return {
+            message: 'Dashboard data for admin ' + adminId
+        };
+    }       
+
+    static async logout(adminId: string, refreshToken: string) {
+        const admin = await AdminModel.findById(adminId);
+
+        if (!admin) {
+            throw new Error('Admin not found');
+        }
+
+        // Ensure token matches
+        if (admin.refreshToken !== refreshToken) {
+            throw new Error('Invalid session');
+        }
+
+        admin.refreshToken = undefined;
+        await admin.save();
+
+        return {
+            message: 'Logged out successfully'
+        };
     }
 
 

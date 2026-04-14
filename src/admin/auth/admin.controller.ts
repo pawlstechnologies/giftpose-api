@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { AdminAuthService } from './admin.service';
+import { Auth } from 'firebase-admin/lib/auth/auth';
+import { AuthRequest } from '../../middleware/auth.middleware';
 
 export class AdminController {
     static async login(req: Request, res: Response) {
@@ -33,6 +35,41 @@ export class AdminController {
             });
         }
     }
+
+    static async getMe(req: AuthRequest, res: Response) {
+        try {
+            const adminId = req.user.id; // from auth middleware
+            const result = await AdminAuthService.getMe(adminId);
+            res.status(200).json(result);
+        } catch (err: any) {
+            res.status(500).json({ message: err.message });
+        }   
+    }
+
+    static async dashboard(req: AuthRequest, res: Response) {
+        try {
+            const adminId = req.user.id; // from auth middleware
+            const result = await AdminAuthService.getDashboardData(adminId);
+            res.status(200).json(result);
+        } catch (err: any) {
+            res.status(500).json({ message: err.message });
+        }   
+    }   
+
+    static async logout(req: AuthRequest, res: Response) {
+        try {
+            const adminId = req.user.id; // from auth middleware
+            const refreshToken = req.body.refreshToken;
+
+            const result = await AdminAuthService.logout(adminId, refreshToken);
+
+            res.status(200).json(result);
+
+        } catch (error: any) {
+            res.status(500).json({ message: error.message });
+        }
+    };
+
 
     // static async verifyMFA(req: Request, res: Response) {
     //     try {

@@ -485,7 +485,13 @@ export default class ItemService {
                     distanceField: "distanceInMeters",
                     maxDistance: maxDistanceMeters,
                     spherical: true,
-                    query: { isTaken: false }
+                    // query: { isTaken: false }
+
+                    query: {
+                        isTaken: false,
+                        takenByDevices: { $ne: deviceId }, // ✅ exclude items taken by this device
+                        hiddenByDevices: { $ne: deviceId }
+                    }
                 }
             },
             { $sort: { distanceInMeters: 1 } },
@@ -747,6 +753,8 @@ export default class ItemService {
             return result[0];
         });
 
+
+
         // Increment visit count
         await ItemModel.findByIdAndUpdate(
             itemId,
@@ -754,6 +762,7 @@ export default class ItemService {
             { new: true }
         );
 
+        const isTakenForDevice = result.takenByDevices?.includes(deviceId) || false;
         const travelTimes = calculateTravelTimes(result.distanceInMiles);
 
         return {
@@ -767,6 +776,7 @@ export default class ItemService {
             city: result.city,
             country: result.country,
             pickup: result.pickup,
+            isTaken: isTakenForDevice,
             expiration: result.expiration,
             url: result.url,
             partner: result.partner,
@@ -782,10 +792,74 @@ export default class ItemService {
             },
             createdAt: result.createdAt
         };
-
-
-
     }
+
+    async markItemAsTaken(itemId: string, deviceId: string) {
+        const item = await ItemModel.findById(itemId);
+
+        if (!item) {
+            return {
+                status: false,
+                statusCode: 404,
+                message: "Item not found"
+            };
+        }
+
+        // 🚫 If device already took it
+        if (item.takenByDevices.includes(deviceId)) {
+            return {
+                status: false,
+                statusCode: 400,
+                message: "You have already taken this item"
+            };
+        }
+
+        // ✅ Add device ID
+        item.takenByDevices.push(deviceId);
+
+        // ✅ Mark as taken
+        item.isTaken = true;
+
+        await item.save();
+
+        return {
+            status: true,
+            statusCode: 200,
+            message: "Item marked as taken successfully"
+        };
+    }
+
+    async hideItem(itemId: string, deviceId: string) {
+        const item = await ItemModel.findById(itemId);
+
+        if (!item) {
+            return {
+                status: false,
+                statusCode: 404,
+                message: "Item not found"
+            };
+        }
+
+        // Already hidden by this device
+        if (item.hiddenByDevices.includes(deviceId)) {
+            return {
+                status: false,
+                statusCode: 400,
+                message: "Item already hidden"
+            };
+        }
+
+        // Add device to hidden list
+        item.hiddenByDevices.push(deviceId);
+        await item.save();
+
+        return {
+            status: true,
+            statusCode: 200,
+            message: "Item hidden successfully"
+        };
+    }
+
 
     async fetchAllItems() {
 

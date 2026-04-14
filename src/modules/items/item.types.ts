@@ -19,6 +19,8 @@ export interface ItemInterface {
     postCode: string;
     partner?: string;
     isTaken: boolean;
+    takenByDevices: string[];
+    hiddenByDevices: string[];
     visitCount: number;
 
     url: String;
