@@ -233,23 +233,60 @@ export const markItemAsTaken = async (req: any, res: any) => {
 };
 
 export const hideItem = async (req: any, res: any) => {
-    const { itemId } = req.params;
-    const { deviceId } = req.body;
+    try {
+        const { itemId } = req.params;
+        const { deviceId } = req.body;
 
-    if (!deviceId) {
-        return res.status(400).json({
-            status: false,
-            message: "Device ID is required"
+        // 🔍 Validate input
+        if (!itemId) {
+            return res.status(400).json({
+                status: false,
+                message: "Item ID is required"
+            });
+        }
+
+        if (!deviceId) {
+            return res.status(400).json({
+                status: false,
+                message: "Device ID is required"
+            });
+        }
+
+        const result = await itemService.hideItem(itemId, deviceId);
+
+        // 🔍 Handle unexpected service response
+        if (!result || typeof result.statusCode !== "number") {
+            return res.status(500).json({
+                status: false,
+                message: "Unexpected error: invalid service response"
+            });
+        }
+
+        return res.status(result.statusCode).json({
+            status: result.status,
+            message: result.message
         });
+
+    } catch (error: any) {
+        console.error("HIDE ITEM ERROR:", error);
+
+        const statusCode = error?.statusCode || 500;
+        const message =
+            error?.message ||
+            (typeof error === "string" ? error : JSON.stringify(error)) ||
+            "Unknown error occurred";
+
+        return res.status(statusCode).send(message);
+        // console.error("HIDE ITEM ERROR:", error);
+
+        // return res.status(500).json({
+        //     status: false,
+        //     message: error?.message || "Failed to hide item. Please try again."
+        // });
     }
-
-    const result = await itemService.hideItem(itemId, deviceId);
-
-    return res.status(result.statusCode).json({
-        status: result.status,
-        message: result.message
-    });
 };
+
+
 
 
 
