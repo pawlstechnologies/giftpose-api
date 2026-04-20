@@ -478,6 +478,30 @@ export default class ItemService {
         // Convert miles to meters
         const maxDistanceMeters = miles * 1609.34; // 1 mile = 1609.34 meters
 
+        // const basePipeline: PipelineStage[] = [
+        //     {
+        //         $geoNear: {
+        //             near: { type: "Point", coordinates: [lng, lat] },
+        //             distanceField: "distanceInMeters",
+        //             maxDistance: maxDistanceMeters,
+        //             spherical: true,
+        //             // query: { isTaken: false }
+
+        //             query: {
+        //                 isTaken: false,
+        //                 takenByDevices: { $ne: deviceId }, // ✅ exclude items taken by this device
+        //                 hiddenByDevices: { $ne: deviceId }
+        //             }
+        //         }
+        //     },
+        //     { $sort: { distanceInMeters: 1 } },
+        //     {
+        //         $addFields: {
+        //             distanceInMiles: { $divide: ["$distanceInMeters", 1609.34] }
+        //         }
+        //     }
+        // ];
+
         const basePipeline: PipelineStage[] = [
             {
                 $geoNear: {
@@ -485,12 +509,20 @@ export default class ItemService {
                     distanceField: "distanceInMeters",
                     maxDistance: maxDistanceMeters,
                     spherical: true,
-                    // query: { isTaken: false }
-
                     query: {
                         isTaken: false,
-                        takenByDevices: { $ne: deviceId }, // ✅ exclude items taken by this device
-                        hiddenByDevices: { $ne: deviceId }
+                        takenByDevices: { $ne: deviceId },
+                        hiddenByDevices: { $ne: deviceId },
+
+                        // 🔥 NEW CONDITION
+                        // "reports.deviceId": { $ne: deviceId }
+
+                        reports: {
+                            $not: {
+                                $elemMatch: { deviceId }
+                            }
+                        }
+
                     }
                 }
             },
@@ -830,6 +862,51 @@ export default class ItemService {
     }
 
     async hideItem(itemId: string, deviceId: string) {
+        const updated = await ItemModel.findByIdAndUpdate(
+            itemId,
+            {
+                $addToSet: {
+                    hiddenByDevices: deviceId
+                }
+            },
+            {
+                new: true,
+                runValidators: false // 🔥 THIS is what you needed
+            }
+        );
+
+        if (!updated) {
+            return {
+                status: false,
+                statusCode: 404,
+                message: "Item not found"
+            };
+        }
+
+        return {
+            status: true,
+            statusCode: 200,
+            message: "Item hidden successfully"
+        };
+    }
+
+    async reportItem(itemId: string, deviceId: string, reason: string) {
+        if (!deviceId) {
+            return {
+                status: false,
+                statusCode: 400,
+                message: "Device ID is required"
+            };
+        }
+
+        if (!reason) {
+            return {
+                status: false,
+                statusCode: 400,
+                message: "Report reason is required"
+            };
+        }
+
         const item = await ItemModel.findById(itemId);
 
         if (!item) {
@@ -840,23 +917,40 @@ export default class ItemService {
             };
         }
 
-        // Already hidden by this device
-        if (item.hiddenByDevices.includes(deviceId)) {
+        // ❌ Check if already reported
+        const alreadyReported = item.reports.some(
+            (r: any) => r.deviceId === deviceId
+        );
+
+        if (alreadyReported) {
             return {
                 status: false,
                 statusCode: 400,
-                message: "Item already hidden"
+                message: "You have already reported this item"
             };
         }
 
-        // Add device to hidden list
-        item.hiddenByDevices.push(deviceId);
-        await item.save();
+        // ✅ Push report
+        await ItemModel.findByIdAndUpdate(
+            itemId,
+            {
+                $push: {
+                    reports: {
+                        deviceId,
+                        reason
+                    }
+                }
+            },
+            {
+                new: true,
+                runValidators: false
+            }
+        );
 
         return {
             status: true,
             statusCode: 200,
-            message: "Item hidden successfully"
+            message: "Item reported successfully"
         };
     }
 

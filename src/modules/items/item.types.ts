@@ -21,6 +21,10 @@ export interface ItemInterface {
     isTaken: boolean;
     takenByDevices: string[];
     hiddenByDevices: string[];
+    reports: {
+      deviceId: string;
+      reason: "NOT_AVAILABLE" | "WRONG_LOCATION" | "MISLEADING" | "PROHIBITED" | "NOT_FREE" | "SCAM" | "INAPPROPRIATE" | "SPAM" | "SAFETY" | "OTHER";
+    }[];
     visitCount: number;
 
     url: String;

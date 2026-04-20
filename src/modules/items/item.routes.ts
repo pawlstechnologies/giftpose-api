@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { createItem, getItemsNearMe, listTrashNotingItems, getItemById, listAllItems, searchItemsNearMe, postItem, analyseImage, markItemAsTaken, hideItem } from './item.controller';
+import { createItem, getItemsNearMe, listTrashNotingItems, getItemById, listAllItems, searchItemsNearMe, postItem, analyseImage, markItemAsTaken, hideItem, getReportOptions, reportItem } from './item.controller';
 
 import { protect } from '../../middleware/auth.middleware';
 import { upload } from '../../middleware/upload';
@@ -15,6 +15,8 @@ router.get("/list", listAllItems); //mirror the items table
 router.post("/:deviceId/search", searchItemsNearMe);
 router.patch('/mark-taken/:itemId', markItemAsTaken);
 router.patch('/hide/:itemId', hideItem);
+router.get('/report-options', getReportOptions);
+router.post('/report/:itemId', reportItem);
 
 ///authentication routes
 router.post('/analyse-image', protect, upload.array('images', 5), analyseImage);

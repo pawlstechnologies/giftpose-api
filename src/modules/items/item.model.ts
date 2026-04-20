@@ -52,6 +52,35 @@ const itemSchema = new Schema<ItemModel>(
       type: [String],
       default: []
     },
+    reports: [
+  {
+    deviceId: {
+      type: String,
+      required: true
+    },
+
+    reason: {
+      type: String,
+      required: true,
+      enum: [
+        "NOT_AVAILABLE",
+        "WRONG_LOCATION",
+        "MISLEADING",
+        "PROHIBITED",
+        "NOT_FREE",
+        "SCAM",
+        "INAPPROPRIATE",
+        "SPAM",
+        "SAFETY",
+        "OTHER"
+      ]
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }
+],
 
     url: { type: String },
 
@@ -69,9 +98,12 @@ const itemSchema = new Schema<ItemModel>(
 
     visitCount: { type: Number, default: 0 }
   },
+  
 
-  { timestamps: true }
+  { timestamps: true },
+
 );
+
 
 // 🔥 GEO INDEX
 itemSchema.index({ location: '2dsphere' });
