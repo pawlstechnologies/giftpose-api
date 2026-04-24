@@ -8,6 +8,8 @@ const locationSchema = new Schema<LocationModel>(
         firebaseToken: { type: String, required: true, unique: true },
         deviceId: { type: String, required: true, unique: true, trim: true },
         postCode: { type: String, required: true, trim: true },
+        adEnabled: { type: Boolean, default: true }, // ads are enabled by default
+        isPremium: { type: Boolean, default: false },
         lat: { type: Number, required: true },
         lng: { type: Number, required: true },
 
@@ -27,7 +29,9 @@ const locationSchema = new Schema<LocationModel>(
         address: { type: String },
         miles: { type: Number, required: true }
     },
-    { timestamps: true }
+     { timestamps: true },
+    
+   
 );
 locationSchema.index({ location: '2dsphere' });
 export default model<LocationModel>("Location", locationSchema);

@@ -1,7 +1,8 @@
 import axios from "axios";
 import { LocationInterface } from "./location.types";
-import LocationModel from "./location.mdel";
+import LocationModel from "./location.model";
 import ApiError from '../../utils/ApiError';
+
 
 import { getDistancebetweenCoordinates } from "../../utils/distance";
 
@@ -43,8 +44,10 @@ export class LocationService {
 
         const data = response.data;
 
+        // console.log('📍 Geocoding response:', data);
+
         if (data.status !== 'OK' || !data.results.length) {
-            throw new ApiError(404, 'Location not found for the provided postcode');
+            throw new ApiError(404, 'There was an issue fetching the location, please try again later');
         }
 
         const result = data.results[0];
@@ -66,7 +69,7 @@ export class LocationService {
             miles,
             location: {
                 type: 'Point',
-                coordinates: [location.lng, location.lat] // 🔥 MUST BE [lng, lat]
+                coordinates: [location.lng, location.lat]
             }
         };
 
@@ -145,6 +148,14 @@ export class LocationService {
 
     }
 
+   async getLocationByDeviceId(deviceId: string): Promise<LocationInterface> {
+        const location = await LocationModel.findOne({ deviceId });
+        if (!location) {
+            throw new ApiError(404, 'Location not found for the provided device ID');
+        }
+        return location.toObject();
+    }   
+
 
     async calculateDistance(postCode1: string, postCode2: string): Promise<number> {
         const normalize = (p: string) => p.trim().toUpperCase();
@@ -177,13 +188,15 @@ export class LocationService {
         return items;
     }
 
+
+
     async deleteLocationByDeviceId(deviceId: string) {
         const deleted = await LocationModel.findOneAndDelete({ deviceId });
         if (!deleted) {
             throw new ApiError(404, 'Location not found for the provided device ID');
         }
         return { message: 'Location deleted successfully' };
-    }   
+    }
 
 
 }

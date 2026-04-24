@@ -11,4 +11,6 @@ export interface LocationInterface {
     city: string;
     address: string;
     miles: number;
+    adEnabled: boolean;
+    isPremium: boolean;
 }   

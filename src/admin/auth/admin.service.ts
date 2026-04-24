@@ -128,6 +128,7 @@ export class AdminAuthService {
 
         return {
             id: admin._id,
+            name: admin.fullname,
             email: admin.email,
             role: admin.role,
             lastLogin: admin.lastLogin

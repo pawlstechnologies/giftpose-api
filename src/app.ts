@@ -10,6 +10,7 @@ import categoryRoutes from './modules/category/category.routes';
 import alertRoutes from './modules/alerts/alerts.routes';
 import notificationRoutes from './modules/notification/notification.routes'
 import authRoutes from './modules/onboarding/auth.routes';
+import paymentRoutes from './modules/payment/payment.routes';
 import userRoutes from './modules/user/user.routes';
 import adminAuthRoutes from './admin/auth/admin.routes';
 import { errorHandler } from "./middleware/error.middleware";
@@ -46,6 +47,7 @@ app.use("/api/item", itemRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/payment", paymentRoutes);
 
 app.use("/api/auth", authRoutes);
 

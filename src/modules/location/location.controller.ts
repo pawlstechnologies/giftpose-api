@@ -69,6 +69,28 @@ export const getDistance = async (req: Request, res: Response) => {
   }
 };
 
+export const getLocationByDeviceId = async (req: Request, res: Response) => {
+  const { deviceId } = req.params as { deviceId: string };
+
+  if (!deviceId?.trim()) {
+    return res.status(400).json({ message: 'Device ID is required' });
+  }
+
+  try {
+    const location = await locationService.getLocationByDeviceId(deviceId);
+    res.status(200).json({
+      status: true,
+      message: 'Location fetched successfully',
+      data: location
+    });
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({
+      status: false,
+      message: error.message || 'Failed to fetch location'
+    });
+  }
+};
+
 
 export const listAllLocation = async (req: Request, res: Response, next: NextFunction) => {
   try {

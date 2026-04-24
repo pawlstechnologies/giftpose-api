@@ -5,7 +5,7 @@ import { ItemInterface } from './item.types';
 import ApiError from '../../utils/ApiError';
 import { PipelineStage } from 'mongoose';
 
-import LocationModel from '../location/location.mdel';
+import LocationModel from '../location/location.model';
 import TrashNotingApi from '../../utils/trashnothing.api';
 import { getDistancebetweenCoordinates, calculateTravelTimes } from '../../utils/distance';
 import OpenAIClient from "../../utils/openai.client";

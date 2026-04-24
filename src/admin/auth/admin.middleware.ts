@@ -9,8 +9,13 @@ const WHITELISTED_IPS = [
     'your-production-ip'
 ];
 
+export interface AuthRequest extends Request {
+    user?: any;
+}
+
+
 export const ipWhitelistMiddleware = (
-    req: Request,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
 ) => {
@@ -27,31 +32,62 @@ export const ipWhitelistMiddleware = (
     next();
 };
 
-
-export const adminAuthMiddleware = (roles: string[] = []) => {
-    return (req: any, res: any, next: any) => {
-        const token = req.headers.authorization?.split(' ')[1];
-
-        if (!token) {
-            return res.status(401).json({ message: 'Unauthorized' });
-        }
-
+export const adminAuthMiddleware =
+    (roles: string[] = []) =>
+    (req: AuthRequest, res: Response, next: NextFunction) => {
         try {
+            const authHeader = req.headers.authorization;
+
+            if (!authHeader) {
+                return res.status(401).json({ message: 'No token provided' });
+            }
+
+            const token = authHeader.split(' ')[1];
+
             const decoded: any = jwt.verify(
                 token,
                 process.env.ADMIN_JWT_SECRET!
             );
 
+            // ✅ THIS IS WHAT YOU ARE MISSING
+            req.user = decoded;
+
+            // ✅ ROLE CHECK
             if (roles.length && !roles.includes(decoded.role)) {
                 return res.status(403).json({ message: 'Forbidden' });
             }
 
-            req.admin = decoded;
             next();
-        } catch {
-            return res.status(401).json({ message: 'Invalid token' });
+        } catch (err) {
+            return res.status(401).json({ message: 'Unauthorized' });
         }
     };
-};
+
+
+// export const adminAuthMiddleware = (roles: string[] = []) => {
+//     return (req: any, res: any, next: any) => {
+//         const token = req.headers.authorization?.split(' ')[1];
+
+//         if (!token) {
+//             return res.status(401).json({ message: 'Unauthorized' });
+//         }
+
+//         try {
+//             const decoded: any = jwt.verify(
+//                 token,
+//                 process.env.ADMIN_JWT_SECRET!
+//             );
+
+//             if (roles.length && !roles.includes(decoded.role)) {
+//                 return res.status(403).json({ message: 'Forbidden' });
+//             }
+
+//             req.admin = decoded;
+//             next();
+//         } catch {
+//             return res.status(401).json({ message: 'Invalid token' });
+//         }
+//     };
+// };
 
 

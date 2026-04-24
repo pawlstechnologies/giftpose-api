@@ -6,7 +6,7 @@ import { generateToken, generateAccessToken, generateRefreshToken } from "../../
 import { generateVerificationCode } from "../../utils/code";
 import { sendVerificationEmail, sendResetPasswordCodeEmail } from "../../utils/email";
 import ApiError from '../../utils/ApiError';
-import LocationModel from "../location/location.mdel";
+import LocationModel from "../location/location.model";
 import * as crypto from 'crypto';
 
 export class AuthService {
