@@ -30,7 +30,7 @@ export interface ItemInterface {
     url: String;
     thumbnail: String;
     type: String;
-    pickup: Boolean;
+    pickup: String;
     country: String;
     postId: Number;
     expiration: Date;

@@ -2,7 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { UserModel } from '../modules/onboarding/auth.model';
 
-export interface AuthRequest extends Request {
+// export interface AuthRequest extends Request {
+//     user?: any;
+// }
+
+export interface AuthRequest<P = {}, B = {}, Q = {}>
+    extends Request<P, {}, B, Q> {
+
     user?: any;
 }
 

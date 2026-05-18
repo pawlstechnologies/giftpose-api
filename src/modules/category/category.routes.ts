@@ -14,6 +14,9 @@ import {
     // deleteSubCategory
 } from './category.controller';
 
+import { upload } from '../../middleware/upload.middleware';
+import { bulkUploadCSVController } from './bulkUpload.controller';
+
 const router = Router();
 
 
@@ -26,6 +29,13 @@ router.post("/contents", createContent);
 router.get("/contents", listContents);
 router.get("/tree", listCategoriesTree);
 router.post("/search", searchCategories);
+
+router.post(
+  "/bulk-upload",
+  upload.single("file"),
+  bulkUploadCSVController
+);
+
 
 // router.put("/:id", updateCategory);
 // router.put("/subcategory/:id", updateSubCategory);

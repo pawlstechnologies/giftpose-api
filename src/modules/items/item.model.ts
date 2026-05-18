@@ -53,39 +53,48 @@ const itemSchema = new Schema<ItemModel>(
       default: []
     },
     reports: [
-  {
-    deviceId: {
-      type: String,
-      required: true
-    },
+      {
+        deviceId: {
+          type: String,
+          required: true
+        },
 
-    reason: {
-      type: String,
-      required: true,
-      enum: [
-        "NOT_AVAILABLE",
-        "WRONG_LOCATION",
-        "MISLEADING",
-        "PROHIBITED",
-        "NOT_FREE",
-        "SCAM",
-        "INAPPROPRIATE",
-        "SPAM",
-        "SAFETY",
-        "OTHER"
-      ]
-    },
-    createdAt: {
-      type: Date,
-      default: Date.now
-    }
-  }
-],
+        reason: {
+          type: String,
+          required: true,
+          enum: [
+            "NOT_AVAILABLE",
+            "WRONG_LOCATION",
+            "MISLEADING",
+            "PROHIBITED",
+            "NOT_FREE",
+            "SCAM",
+            "INAPPROPRIATE",
+            "SPAM",
+            "SAFETY",
+            "OTHER"
+          ]
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now
+        }
+      }
+    ],
 
     url: { type: String },
 
-    type: { type: String },
-    pickup: { type: Boolean, default: false },
+    type: {
+      type: String,
+      enum: ['offer', 'request'],
+      default: 'offer'
+    },
+    
+    pickup: {
+      type: String,
+      enum: ['Pickup', 'Personal Delivery', 'Agent Delivery (payment upon delivery)'],
+      default: 'Pickup'
+    },
     country: { type: String, required: true },
     postId: { type: Number, required: true, unique: true },
     expiration: { type: Date, required: true },
@@ -98,7 +107,7 @@ const itemSchema = new Schema<ItemModel>(
 
     visitCount: { type: Number, default: 0 }
   },
-  
+
 
   { timestamps: true },
 

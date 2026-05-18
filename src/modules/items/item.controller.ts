@@ -73,6 +73,66 @@ export const postItem = async (req: AuthRequest, res: Response) => {
     }
 }
 
+export const postItemRequest = async (req: AuthRequest, res: Response) => {
+    try {
+
+        const user = req.user;
+
+        if (!user) {
+            return res.status(401).json({
+                message: 'Unauthorized'
+            });
+        }
+
+
+        const item = await itemService.postItemRequest(req.body, req.file, user);
+
+        return res.status(201).json({
+            status: true,
+            message: 'Item Requested Successfully',
+            data: item
+        });
+
+    } catch (err: any) {
+        return res.status(400).json({
+            message: err.message
+        });
+    }
+};  
+
+
+interface UpdateItemParams {
+    itemId: string;
+}
+
+export const updateItem = async (
+    req: AuthRequest<UpdateItemParams>,
+    res: Response
+) => {
+
+    try {
+
+        const item = await itemService.updateItem(
+            req.params.itemId,
+            req.body,
+            req.user
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Item updated successfully",
+            data: item,
+        });
+
+    } catch (error: any) {
+
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};
+
 
 
 export const getItemsNearMe = async (req: Request, res: Response) => {
@@ -149,38 +209,6 @@ export const searchItemsNearMe = async (req: Request<GetDeviceParams>, res: Resp
         });
     }
 };
-
-// export const searchItemsNearMe = async (req: Request<GetDeviceParams>, res: Response) => {
-//   try {
-//     const { deviceId } = req.params;
-//     const { keywords, page = 1, limit = 10 } = req.body; // POST body
-
-//     if (!deviceId) return res.status(400).json({ success: false, message: "DeviceId is required" });
-
-//     const offset = (page - 1) * limit;
-
-//     const result = await itemService.searchItemsNearMe(deviceId, keywords, Number(limit), offset);
-
-//     return res.json({
-//       success: true,
-//       message: "Items near you fetched successfully",
-//       page: Number(page),
-//       perPage: Number(limit),
-//       total: result.total,
-//       userLocation: result.userLocation,
-//       data: result.items
-//     });
-
-//   } catch (error: any) {
-//     return res.status(error.statusCode || 500).json({
-//       success: false,
-//       message: error.message || "Internal server error"
-//     });
-//   }
-// };
-
-
-
 
 export const getItemById = async (req: Request<GetItemParams>, res: Response) => {
     try {
@@ -325,6 +353,28 @@ export const listAllItems = async (req: Request, res: Response, next: NextFuncti
             message: error.message || 'Failed to fetch items'
         });
     }
+};
+
+
+export const pickupOptions = async (req: any, res: any) => {
+  try {
+    const options = [
+      { name: 'Pickup' },
+      { name: 'Personal Delivery' },
+      { name: 'Agent Delivery (payment upon delivery)' }
+    ];
+
+    return res.status(200).json({
+      status: true,
+      message: "Pickup options fetched successfully",
+      data: options
+    });
+
+  } catch (error: any) {
+    return res.status(500).send(
+      error?.message || "Failed to fetch pickup options"
+    );
+  }
 };
 
 //report options

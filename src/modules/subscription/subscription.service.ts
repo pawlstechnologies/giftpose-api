@@ -13,33 +13,144 @@ export class SubscriptionService {
     ) {
 
         if (!deviceId?.trim()) {
-            throw new ApiError(400, "Device ID required");
-        }
-
-        const existing = await SubscriptionModel.findOne({
-            deviceId,
-            status: {
-                $in: ["active", "incomplete", "past_due"],
-            },
-        });
-
-        if (existing) {
             throw new ApiError(
                 400,
-                "Subscription already exists"
+                "Device ID required"
             );
         }
 
         const priceId =
             plan === "monthly"
-                ? process.env.STRIPE_MONTHLY_PRICE_ID!
-                : process.env.STRIPE_ANNUAL_PRICE_ID!;
+                ? process.env
+                    .STRIPE_MONTHLY_PRICE_ID!
+                : process.env
+                    .STRIPE_ANNUAL_PRICE_ID!;
 
-        const customer = await stripe.customers.create({
-            metadata: {
+        const existing =
+            await SubscriptionModel.findOne({
                 deviceId,
-            },
-        });
+            });
+
+        // EXISTING SUBSCRIPTION
+        if (existing) {
+
+            let stripeSubscription: any = null;
+
+            try {
+
+                stripeSubscription =
+                    await stripe.subscriptions.retrieve(
+                        existing.stripeSubscriptionId,
+                        {
+                            expand: [
+                                "latest_invoice.payment_intent",
+                            ],
+                        }
+                    );
+
+            } catch (error) {
+
+                // Subscription no longer exists on Stripe
+                await SubscriptionModel.deleteOne({
+                    _id: existing._id,
+                });
+            }
+
+            // VALID STRIPE SUBSCRIPTION
+            if (stripeSubscription) {
+
+                const stripeStatus =
+                    stripeSubscription.status;
+
+                // Sync DB status
+                existing.status =
+                    stripeStatus;
+
+                await existing.save();
+
+                // ACTIVE SUBSCRIPTION
+                if (
+                    stripeStatus === "active" ||
+                    stripeStatus === "past_due"
+                ) {
+                    throw new ApiError(
+                        400,
+                        "Subscription already exists"
+                    );
+                }
+
+                // INCOMPLETE SUBSCRIPTION
+                if (
+                    stripeStatus === "incomplete"
+                ) {
+
+                    // SAME PLAN
+                    if (
+                        existing.plan === plan
+                    ) {
+
+                        const invoice =
+                            stripeSubscription
+                                .latest_invoice;
+
+                        const paymentIntent =
+                            invoice?.payment_intent;
+
+                        if (
+                            !paymentIntent?.client_secret
+                        ) {
+                            throw new ApiError(
+                                500,
+                                "Unable to retrieve payment intent"
+                            );
+                        }
+
+                        return {
+                            subscriptionId:
+                                stripeSubscription.id,
+
+                            clientSecret:
+                                paymentIntent.client_secret,
+                        };
+                    }
+
+                    // DIFFERENT PLAN
+
+                    // Cancel old incomplete subscription
+                    await stripe.subscriptions.cancel(
+                        stripeSubscription.id
+                    );
+
+                    // Remove old DB record
+                    await SubscriptionModel.deleteOne({
+                        _id: existing._id,
+                    });
+                }
+
+                // CANCELED / EXPIRED
+                if (
+                    stripeStatus === "cancelled" ||
+                    stripeStatus ===
+                    "incomplete_expired" ||
+                    stripeStatus ===
+                    "unpaid"
+                ) {
+
+                    await SubscriptionModel.deleteOne({
+                        _id: existing._id,
+                    });
+                }
+            }
+        }
+
+        // CREATE NEW SUBSCRIPTION
+
+        const customer =
+            await stripe.customers.create({
+                metadata: {
+                    deviceId,
+                },
+            });
 
         const subscription =
             await stripe.subscriptions.create({
@@ -51,7 +162,8 @@ export class SubscriptionService {
                     },
                 ],
 
-                payment_behavior: "default_incomplete",
+                payment_behavior:
+                    "default_incomplete",
 
                 payment_settings: {
                     save_default_payment_method:
@@ -66,36 +178,50 @@ export class SubscriptionService {
                     deviceId,
                     plan,
                 },
-            });
+            }) as any;
 
         const invoice =
-            subscription.latest_invoice as any;
+            subscription.latest_invoice;
 
         const paymentIntent =
-            invoice.payment_intent;
+            invoice?.payment_intent;
+
+        if (
+            !paymentIntent?.client_secret
+        ) {
+            throw new ApiError(
+                500,
+                "Unable to retrieve payment intent"
+            );
+        }
 
         await SubscriptionModel.create({
             deviceId,
 
-            stripeCustomerId: customer.id,
+            stripeCustomerId:
+                customer.id,
 
             stripeSubscriptionId:
                 subscription.id,
 
-            stripePriceId: priceId,
+            stripePriceId:
+                priceId,
 
             plan,
 
-            status: subscription.status,
+            status:
+                subscription.status,
 
-            currentPeriodEnd: new Date(
-                subscription.current_period_end *
-                1000
-            ),
+            currentPeriodEnd:
+                new Date(
+                    subscription.current_period_end *
+                    1000
+                ),
         });
 
         return {
-            subscriptionId: subscription.id,
+            subscriptionId:
+                subscription.id,
 
             clientSecret:
                 paymentIntent.client_secret,

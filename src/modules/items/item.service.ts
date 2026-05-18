@@ -365,6 +365,345 @@ export default class ItemService {
 
 
 
+    async postItemRequest(data: any, file: any, user: any) {
+
+        const {
+            name,
+            description,
+            categoryId,
+            subcategoryId,
+            contentId,
+            suggestedCategoryId,
+            suggestedSubcategoryId,
+            suggestedContentId,
+            imageUrls,
+            postCode,
+            type,
+            pickup,
+            country } = data;
+
+        const finalCategoryId = categoryId || suggestedCategoryId;
+        const finalSubcategoryId = subcategoryId || suggestedSubcategoryId;
+        const finalContentId = contentId || suggestedContentId;
+
+        if (!finalCategoryId || !finalSubcategoryId || !finalContentId) {
+            throw new Error('Invalid category structure');
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(finalCategoryId)) {
+            throw new Error('Invalid category ID');
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(finalSubcategoryId)) {
+            throw new Error('Invalid subcategory ID');
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(finalContentId)) {
+            throw new Error('Invalid content ID');
+        }
+
+
+        const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+
+        if (!apiKey) {
+            throw new Error('Google Maps API key is not configured');
+        }
+
+        const response = await axios.get(
+            'https://maps.googleapis.com/maps/api/geocode/json',
+            {
+                params: { address: postCode, key: apiKey }
+            }
+        );
+
+        const geoData = response.data;
+
+        if (geoData.status !== 'OK' || !geoData.results.length) {
+            throw new Error('Location not found for the provided postcode');
+        }
+
+        const result = geoData.results[0];
+        const location = result.geometry.location;
+
+        const cityComponent = result.address_components.find((comp: any) =>
+            comp.types.includes('locality') ||
+            comp.types.includes('postal_town')
+        );
+
+        const city = cityComponent?.long_name || '';
+
+
+        // const userId = user._id;
+        // const deviceId = user.deviceId;
+
+
+        // 🔥 3. Create item
+        const item = await ItemModel.create({
+            userId: user._id,
+
+            name,
+            description,
+            imageUrls,
+
+            categoryId: finalCategoryId,
+            subCategoryId: finalSubcategoryId,
+            contentId: finalContentId,
+
+            isCategorised: true,
+
+            city,
+            postCode,
+            country,
+
+            location: {
+                type: 'Point',
+                coordinates: [location.lng, location.lat]
+            },
+
+            partner: 'Gifpose',
+
+            expiration: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+
+            postId: Date.now() + Math.floor(Math.random() * 1000),
+
+            status: 'Live',
+            type: type || "request",
+            pickup: pickup,
+
+            thumbnail: imageUrls?.[0] || ''
+        });
+
+        await this.handlePostSideEffects(user, item);
+
+        return item;
+
+    }
+
+
+    async updateItem(
+        itemId: string,
+        data: any,
+        user: any
+    ) {
+
+        if (!mongoose.Types.ObjectId.isValid(itemId)) {
+            throw new Error("Invalid item ID");
+        }
+
+        const item = await ItemModel.findById(itemId);
+
+        if (!item) {
+            throw new Error("Item not found");
+        }
+
+        // Optional ownership check
+        if (item.userId.toString() !== user._id.toString()) {
+            throw new Error("Unauthorized");
+        }
+
+        const {
+            name,
+            description,
+
+            categoryId,
+            subcategoryId,
+            contentId,
+
+            suggestedCategoryId,
+            suggestedSubcategoryId,
+            suggestedContentId,
+
+            postCode,
+            country,
+            pickup,
+            type,
+
+            addImages = [],
+            removeImages = [],
+        } = data;
+
+        // =====================================================
+        // CATEGORY HANDLING
+        // =====================================================
+
+        const finalCategoryId =
+            categoryId || suggestedCategoryId || item.categoryId;
+
+        const finalSubcategoryId =
+            subcategoryId ||
+            suggestedSubcategoryId ||
+            item.subCategoryId;
+
+        const finalContentId =
+            contentId ||
+            suggestedContentId ||
+            item.contentId;
+
+        if (
+            !mongoose.Types.ObjectId.isValid(finalCategoryId)
+        ) {
+            throw new Error("Invalid category ID");
+        }
+
+        if (
+            !mongoose.Types.ObjectId.isValid(finalSubcategoryId)
+        ) {
+            throw new Error("Invalid subcategory ID");
+        }
+
+        if (
+            !mongoose.Types.ObjectId.isValid(finalContentId)
+        ) {
+            throw new Error("Invalid content ID");
+        }
+        const subcategory =
+            await SubCategoryModel.findOne({
+                _id: finalSubcategoryId,
+                categoryId: finalCategoryId,
+            });
+
+        if (!subcategory) {
+            throw new Error(
+                "Subcategory does not belong to category"
+            );
+        }
+
+        // =====================================================
+        // LOCATION UPDATE
+        // =====================================================
+
+        let updatedLocation = item.location;
+        let updatedCity = item.city;
+        let updatedPostCode = item.postCode;
+
+        if (postCode && postCode !== item.postCode) {
+
+            const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+
+            if (!apiKey) {
+                throw new Error(
+                    "Google Maps API key is not configured"
+                );
+            }
+
+            const response = await axios.get(
+                "https://maps.googleapis.com/maps/api/geocode/json",
+                {
+                    params: {
+                        address: postCode,
+                        key: apiKey,
+                    },
+                }
+            );
+
+            const geoData = response.data;
+
+            if (
+                geoData.status !== "OK" ||
+                !geoData.results.length
+            ) {
+                throw new Error(
+                    "Location not found for the provided postcode"
+                );
+            }
+
+            const result = geoData.results[0];
+
+            const location = result.geometry.location;
+
+            const cityComponent =
+                result.address_components.find(
+                    (comp: any) =>
+                        comp.types.includes("locality") ||
+                        comp.types.includes("postal_town")
+                );
+
+            updatedCity =
+                cityComponent?.long_name || "";
+
+            updatedPostCode = postCode;
+
+            updatedLocation = {
+                type: "Point",
+                coordinates: [
+                    location.lng,
+                    location.lat,
+                ],
+            };
+        }
+
+        // =====================================================
+        // IMAGE HANDLING
+        // =====================================================
+
+        let updatedImages = [...(item.imageUrls || [])];
+
+        // Remove images
+        if (
+            Array.isArray(removeImages) &&
+            removeImages.length
+        ) {
+            updatedImages = updatedImages.filter(
+                (img) => !removeImages.includes(img)
+            );
+        }
+
+        // Add new images
+        if (
+            Array.isArray(addImages) &&
+            addImages.length
+        ) {
+            updatedImages.push(...addImages);
+        }
+
+        // Remove duplicates
+        updatedImages = [...new Set(updatedImages)];
+
+        // =====================================================
+        // UPDATE ITEM
+        // =====================================================
+
+        item.name = name || item.name;
+
+        item.description =
+            description || item.description;
+
+        item.categoryId = finalCategoryId;
+
+        item.subCategoryId =
+            finalSubcategoryId;
+
+        item.contentId = finalContentId;
+
+        item.postCode = updatedPostCode;
+
+        item.country = country || item.country;
+
+        item.city = updatedCity;
+
+        item.location = updatedLocation;
+
+        item.pickup =
+            pickup !== undefined
+                ? pickup
+                : item.pickup;
+
+        item.type = type || item.type;
+
+        item.imageUrls = updatedImages;
+
+        // Auto update thumbnail
+        item.thumbnail =
+            updatedImages?.[0] || "";
+
+        await item.save();
+
+        return item;
+    }
+
+
+
+
 
     async handlePostSideEffects(user: any, item: any) {
         try {
