@@ -13,6 +13,8 @@ import authRoutes from './modules/onboarding/auth.routes';
 import paymentRoutes from './modules/payment/payment.routes';
 import userRoutes from './modules/user/user.routes';
 import adminAuthRoutes from './admin/auth/admin.routes';
+import subscriptionRoutes from './modules/subscription/subscription.routes'
+import subscriptionWebhook from './modules/subscription/subscription.webhook';
 import { errorHandler } from "./middleware/error.middleware";
 import { globalLimiter, helmetMiddleware } from "./middleware/security";
 
@@ -48,6 +50,8 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/subscription", subscriptionRoutes);
+app.use("/api/stripe-webhook", subscriptionWebhook);
 
 app.use("/api/auth", authRoutes);
 
