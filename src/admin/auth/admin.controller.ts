@@ -3,6 +3,9 @@ import { AdminAuthService } from './admin.service';
 import { Auth } from 'firebase-admin/lib/auth/auth';
 import { AuthRequest } from '../../middleware/auth.middleware';
 
+  interface LogoutBody {
+        refreshToken: string;
+    } 
 export class AdminController {
     static async login(req: Request, res: Response) {
         try {
@@ -56,7 +59,7 @@ export class AdminController {
         }   
     }   
 
-    static async logout(req: AuthRequest, res: Response) {
+    static async logout(req: AuthRequest<any, LogoutBody>, res: Response) {
         try {
             const adminId = req.user.id; // from auth middleware
             const refreshToken = req.body.refreshToken;
