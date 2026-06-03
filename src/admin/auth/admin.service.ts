@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+
+
 // import speakeasy from 'speakeasy';
 
 import crypto from 'crypto'
@@ -7,13 +9,15 @@ import crypto from 'crypto'
 import { AdminModel } from './admin.model';
 // import { token } from 'morgan';
 import { sendVerificationEmail } from '../../utils/email';
+import { log } from 'console';
+import { logActivity } from '../activityLog/activity.service';
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_TIME = 15 * 60 * 1000; // 15 minutes
 const OTP_EXPIRE_MINUTES = 5; // OTP expires in 5 mins
 
 export class AdminAuthService {
-    static async login(email: string, password: string) {
+    static async login(email: string, password: string, meta: any) {
         const admin = await AdminModel.findOne({ email });
 
         if (!admin) throw new Error('Email or Password incorrect');
@@ -43,6 +47,21 @@ export class AdminAuthService {
 
         await admin.save();
 
+        await logActivity({
+            adminId: admin._id.toString(),
+            adminEmail: admin.email,
+            action: 'login_attempt',
+            resource: 'admin',
+            resourceId: admin._id.toString(),
+            description: `${admin.fullname} attempted to login`,
+            ipAddress: meta.ipAddress,
+            userAgent: meta.userAgent,
+            browser: meta.browser,
+            os: meta.os,
+            deviceType: meta.deviceType,
+            deviceId: meta.deviceId,
+        });
+
         return {
             message: 'OTP sent to email',
             adminId: admin._id
@@ -50,7 +69,7 @@ export class AdminAuthService {
 
     }
 
-    static async verifyOTP(adminId: string, otp: string) {
+    static async verifyOTP(adminId: string, otp: string, meta: any) {
         const admin = await AdminModel.findById(adminId);
         if (!admin) throw new Error('Admin not found');
 
@@ -72,6 +91,20 @@ export class AdminAuthService {
         admin.otpAttempts = 0;
         admin.lastLogin = new Date();
         await admin.save();
+
+        await logActivity({
+            adminId: admin._id.toString(),
+            adminEmail: admin.email,
+            action: 'login',
+            resource: 'admin',
+            resourceId: admin._id.toString(),
+            description: `${admin.fullname} logged in successfully`,
+            ipAddress: meta.ipAddress,
+            userAgent: meta.userAgent,
+            browser: meta.browser,
+            os: meta.os,
+            deviceType: meta.deviceType,
+        });
 
         // ✅ Issue tokens after successful OTP
         return this.generateTokens(admin);

@@ -1,6 +1,24 @@
 import { Router } from 'express';
 
-import { createItem, getItemsNearMe, listTrashNotingItems, getItemById, listAllItems, searchItemsNearMe, postItem, analyseImage, markItemAsTaken, hideItem, getReportOptions, reportItem, pickupOptions, postItemRequest, updateItem } from './item.controller';
+import { 
+    createItem, 
+    getItemsNearMe, 
+    listTrashNotingItems, 
+    getItemById, 
+    listAllItems, 
+    searchItemsNearMe, 
+    postItem, 
+    analyseImage, 
+    markItemAsTaken, 
+    hideItem, 
+    getReportOptions, 
+    reportItem, 
+    pickupOptions, 
+    postItemRequest, 
+    updateItem, 
+    markItemAsInterested,
+    getMyDonations
+} from './item.controller';
 
 import { protect } from '../../middleware/auth.middleware';
 import { upload } from '../../middleware/upload';
@@ -24,6 +42,13 @@ router.post('/post', protect, postItem);
 router.post('/post-request', protect, postItemRequest);
 router.get('/pickup-options', protect, pickupOptions);
 router.patch('/update/:itemId', protect, updateItem);
+
+
+//request a gift
+router.post('/request-gift/:itemId', protect, markItemAsInterested);
+
+//user GiftPose items
+router.get('/donations', protect, getMyDonations); //get items posted by the authenticated user
 
 
 export default router;

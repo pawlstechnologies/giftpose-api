@@ -15,6 +15,7 @@ import userRoutes from './modules/user/user.routes';
 import adminAuthRoutes from './admin/auth/admin.routes';
 import subscriptionRoutes from './modules/subscription/subscription.routes'
 import subscriptionWebhook from './modules/subscription/subscription.webhook';
+import activityLog from './admin/activityLog/activity.routes';
 import { errorHandler } from "./middleware/error.middleware";
 import { globalLimiter, helmetMiddleware } from "./middleware/security";
 
@@ -61,7 +62,7 @@ app.use("/api/user", userRoutes);
 
 ////admin routes
 app.use("/api/admin/auth", adminAuthRoutes);
-
+app.use("/api/admin/activity", activityLog);
 
 app.use(errorHandler); //handles error globally
 

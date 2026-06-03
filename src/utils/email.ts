@@ -253,6 +253,23 @@ export const sendPostCreatedEmail = async (email: string, item: any) => {
   });
 };
 
+export const sendPostRequestEmail = async (email: string, item: any) => {
+  await resend.emails.send({
+    from: process.env.EMAIL_FROM!,
+    to: email,
+    subject: 'You receive a new item request 🔍',
+    html: `
+      <h2>Your item has been requested!</h2>
+      <p><strong>${item.name}</strong></p>
+      <p>${item.description}</p>
+      <p>Status: ${item.status}</p>
+    `
+  });
+};
+
+
+
+
 
 
 // export const sendResetPasswordEmail = async (

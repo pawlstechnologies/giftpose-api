@@ -43,7 +43,7 @@ const subscriptionSchema = new Schema<Subscription>(
       enum: [
         "active",
         "inactive",
-        "cancelled",
+        "canceled",
         "past_due",
         "incomplete",
         "incomplete_expired"

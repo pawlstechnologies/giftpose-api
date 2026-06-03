@@ -5,6 +5,8 @@ import ApiError from '../../utils/ApiError';
 
 
 import { getDistancebetweenCoordinates } from "../../utils/distance";
+import { SubscriptionModel } from "../subscription/subscription.model";
+import { UserModel } from "../onboarding/auth.model";
 
 
 export class LocationService {
@@ -143,18 +145,33 @@ export class LocationService {
         console.log(`🎯 Devices after radius filter: ${filteredDevices.length}`);
 
         return filteredDevices;
-        // return devices;
-
 
     }
 
-   async getLocationByDeviceId(deviceId: string): Promise<LocationInterface> {
+    async getLocationByDeviceId(deviceId: string): Promise<LocationInterface> {
         const location = await LocationModel.findOne({ deviceId });
+        const subscription = await SubscriptionModel.findOne({ deviceId }).lean();
+        const user = await UserModel.findOne({ deviceId }).lean();
+
         if (!location) {
             throw new ApiError(404, 'Location not found for the provided device ID');
         }
-        return location.toObject();
-    }   
+
+        return {
+            ...location.toObject(),
+            subscription: subscription || null,
+            user: user
+                ? {
+                    id: user._id,
+                    deviceId: user.deviceId,
+                    fullname: user.fullname,
+                    email: user.email,
+                    phone: user.username,
+                }
+                : null,
+        };
+
+    }
 
 
     async calculateDistance(postCode1: string, postCode2: string): Promise<number> {

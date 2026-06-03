@@ -13,6 +13,18 @@ const locationSchema = new Schema<LocationModel>(
         lat: { type: Number, required: true },
         lng: { type: Number, required: true },
 
+        subscriptionId: {
+            type: String,
+            ref: "Subscription",
+        },
+        subscription: {
+            type: Schema.Types.ObjectId,
+            ref: "Subscription",
+        }, 
+        user: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+        },   
 
         location: {
             type: {

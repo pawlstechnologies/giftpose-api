@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AdminAuthService } from './admin.service';
 import { Auth } from 'firebase-admin/lib/auth/auth';
 import { AuthRequest } from '../../middleware/auth.middleware';
+import { extractRequestMeta } from "../../utils/requestMeta";
 
   interface LogoutBody {
         refreshToken: string;
@@ -10,7 +11,8 @@ export class AdminController {
     static async login(req: Request, res: Response) {
         try {
             const { email, password } = req.body;
-            const result = await AdminAuthService.login(email, password);
+            const meta = extractRequestMeta(req);
+            const result = await AdminAuthService.login(email, password, meta);
             res.json(result);
         } catch (err: any) {
             res.status(401).json({ error: err.message });
@@ -20,13 +22,14 @@ export class AdminController {
     static async verifyOTP(req: Request, res: Response) {
         try {
             const { adminId, otp } = req.body;
+            const meta = extractRequestMeta(req);
 
             if (!adminId || !otp) {
                 return res.status(400).json({ message: 'Admin ID and OTP are required' });
             }
 
             // Call service to verify OTP
-            const result = await AdminAuthService.verifyOTP(adminId, otp);
+            const result = await AdminAuthService.verifyOTP(adminId, otp, meta);
 
             // Send response
             res.status(200).json(result);

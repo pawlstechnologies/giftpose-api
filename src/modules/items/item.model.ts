@@ -1,5 +1,6 @@
 import { Schema, model, HydratedDocument, Types } from 'mongoose';
 import { ItemInterface } from './item.types';
+import { string } from 'joi';
 
 export type ItemModel = HydratedDocument<ItemInterface>;
 
@@ -8,6 +9,11 @@ const itemSchema = new Schema<ItemModel>(
     userId: {
       type: Schema.Types.ObjectId, ref: "User", required: false
     },
+    deviceId: {
+      type: String,
+      required: false
+    },
+
     name: { type: String, required: true },
     description: { type: String },
     imageUrls: { type: [String], default: [] },
@@ -52,6 +58,32 @@ const itemSchema = new Schema<ItemModel>(
       type: [String],
       default: []
     },
+    interestedByDevices: {
+      type: [
+        {
+          deviceId: {
+            type: String,
+            required: true
+          },
+          userId: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+            required: true
+          },
+          message: {
+            type: String,
+            default: "",
+            required: true
+          },
+
+          createdAt: {
+            type: Date,
+            default: Date.now
+          }
+        }
+      ],
+      default: []
+    },
     reports: [
       {
         deviceId: {
@@ -89,7 +121,7 @@ const itemSchema = new Schema<ItemModel>(
       enum: ['offer', 'request'],
       default: 'offer'
     },
-    
+
     pickup: {
       type: String,
       enum: ['Pickup', 'Personal Delivery', 'Agent Delivery (payment upon delivery)'],

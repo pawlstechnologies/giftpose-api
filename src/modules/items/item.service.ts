@@ -13,16 +13,18 @@ import { CategoryModel } from "../category/category.model";
 import { SubCategoryModel } from "../category/category.model";
 import { ContentModel } from "../category/category.model";
 import { uploadToCloudinary } from "../../utils/uploadToCloudinary";
-import { sendPostCreatedEmail } from "../../utils/email";
+import { sendPostCreatedEmail, sendPostRequestEmail } from "../../utils/email";
 import NotificationModels from "../notification/notification.models";
 import { LocationService } from "../location/location.service";
 import { sendBulkPushNotification } from "../../utils/push";
 import OpenAI from "openai";
 import { DeviceAlertModel } from "../alerts/alerts.model";
+import { UserModel } from "../onboarding/auth.model";
 
 
 
 export default class ItemService {
+
     async createItem(data: ItemInterface) {
         if (!data.lng || !data.lat) {
             throw new ApiError(413, 'Latitude and longitude are required');
@@ -298,6 +300,7 @@ export default class ItemService {
         // 🔥 3. Create item
         const item = await ItemModel.create({
             userId: user._id,
+            deviceId: user.deviceId,
 
             name,
             description,
@@ -440,6 +443,7 @@ export default class ItemService {
         // 🔥 3. Create item
         const item = await ItemModel.create({
             userId: user._id,
+            deviceId: user.deviceId,
 
             name,
             description,
@@ -703,8 +707,6 @@ export default class ItemService {
 
 
 
-
-
     async handlePostSideEffects(user: any, item: any) {
         try {
 
@@ -800,9 +802,6 @@ export default class ItemService {
         }
 
     }
-
-
-
 
     async getItemsNearLocation(deviceId: String, limit: number, offset: number) {
         //getch devie location
@@ -910,85 +909,6 @@ export default class ItemService {
         };
 
     }
-
-    // async searchItemsNearMe(deviceId: string, keywords: string[], limit: number, offset: number) {
-    //     // Get device location
-    //     const location = await LocationModel.findOne({ deviceId });
-    //     if (!location) {
-    //         throw new ApiError(404, 'Device not found');
-    //     }
-
-    //     const { lat, lng, miles } = location;
-
-    //     // Convert miles to meters
-    //     const maxDistanceMeters = miles * 1609.34;
-
-    //     // Prepare regex for keywords search
-    //     const regexArray = keywords?.map(kw => new RegExp(kw, "i")) || [];
-
-    //     // Base pipeline for geo query
-    //     const basePipeline: PipelineStage[] = [
-    //         {
-    //             $geoNear: {
-    //                 near: { type: "Point", coordinates: [lng, lat] },
-    //                 distanceField: "distanceInMeters",
-    //                 maxDistance: maxDistanceMeters,
-    //                 spherical: true,
-    //                 query: {
-    //                     isTaken: false,
-    //                     $or: [
-    //                         { name: { $in: regexArray } },
-    //                         { description: { $in: regexArray } },
-    //                         { category: { $in: regexArray } },
-    //                         { subCategory: { $in: regexArray } },
-    //                     ]
-    //                 }
-    //             }
-    //         },
-    //         { $sort: { distanceInMeters: 1 } },
-    //         {
-    //             $addFields: {
-    //                 distanceInMiles: { $divide: ["$distanceInMeters", 1609.34] }
-    //             }
-    //         }
-    //     ];
-
-    //     // Paginated results
-    //     const items = await ItemModel.aggregate([
-    //         ...basePipeline,
-    //         { $skip: offset },
-    //         { $limit: limit }
-    //     ]);
-
-    //     // Total count without skip/limit
-    //     const totalResult = await ItemModel.aggregate([
-    //         ...basePipeline,
-    //         { $count: "total" }
-    //     ]);
-    //     const total = totalResult[0]?.total || 0;
-
-    //     return {
-    //         userLocation: {
-    //             deviceId: location.deviceId,
-    //             postcode: location.postCode,
-    //             city: location.city,
-    //             setMile: location.miles
-    //         },
-    //         items: items.map(item => ({
-    //             _id: item._id,
-    //             name: item.name,
-    //             description: item.description,
-    //             category: item.category,
-    //             subCategory: item.subCategory,
-    //             partner: item.partner || "Unknown",
-    //             thumbnail: item.imageUrls?.[0] || item.thumbnail || null,
-    //             visitCount: item.visitCount ?? 0,
-    //             distanceInMeters: item.distanceInMeters ?? 0,
-    //             distanceInMiles: item.distanceInMiles ?? 0
-    //         })),
-    //         total
-    //     };
-    // }
 
     async searchItemsNearMe(deviceId: string, keywords: string[], limit: number, offset: number) {
         // 1️⃣ Get device location
@@ -1200,6 +1120,102 @@ export default class ItemService {
         };
     }
 
+    async indicateInterest(
+        itemId: string,
+        userId: string,
+        deviceId: string,
+        message?: string
+    ) {
+
+        const item = await ItemModel.findById(itemId);
+
+        if (!item) {
+            return {
+                status: false,
+                statusCode: 404,
+                message: "Item not found"
+            };
+        }
+
+        // Prevent owner from showing interest
+        if (
+            item.userId?.toString() === userId ||
+            item.deviceId === deviceId
+        ) {
+            return {
+                status: false,
+                statusCode: 400,
+                message:
+                    "You cannot indicate interest in your own item"
+            };
+        }
+
+        // Check existing interest
+        const alreadyInterested =
+            item.interestedByDevices.some(
+                (interest: any) =>
+                    interest.deviceId === deviceId ||
+                    interest.userId?.toString() === userId
+            );
+
+        if (alreadyInterested) {
+            return {
+                status: false,
+                statusCode: 400,
+                message:
+                    "You have already indicated interest in this item"
+            };
+        }
+
+        //fetch poster user id from item model
+        const user = await UserModel.findById(item.userId);
+
+        // Add interest
+        item.interestedByDevices.push({
+            deviceId,
+            userId,
+            message: message || "",
+            createdAt: new Date()
+        });
+
+        await item.save();
+
+        await this.sendNotificationToPoster(user, item);
+
+        return {
+            status: true,
+            statusCode: 200,
+            message:
+                "Interest indicated successfully",
+            data: item
+        };
+    }
+
+
+    async sendNotificationToPoster(user: any, item: any) {
+        console.log('🚀 Running post side effects...');
+
+        //notify user in-app notification
+        await NotificationModels.create({
+            deviceId: user.deviceId,
+            userId: user._id,
+            title: 'Item Request',
+            message: `${item.name} is now live`,
+            type: 'Item_Request',
+            img: item.thumbnail || 'https://res.cloudinary.com/dxfq3iotg/image/upload/v1692099205/giftpose/default-item.png',
+            data: { itemId: item._id }
+        });
+        console.log('🔔 In-app notification created');
+
+        //notify user by email 
+        await sendPostRequestEmail(user.email, item);
+
+        console.log('📧 Email sent to:', user.email);
+
+
+    }
+
+
     async hideItem(itemId: string, deviceId: string) {
         const updated = await ItemModel.findByIdAndUpdate(
             itemId,
@@ -1300,6 +1316,20 @@ export default class ItemService {
             .find()
             .sort({ createdAt: -1 }) // optional sorting
             .lean();
+
+        return items;
+    }
+
+
+    ///authenticated rouutes
+
+    async getMyItems(userId: string, deviceId: string) {
+        const items = await ItemModel.find({
+            $or: [
+                { userId },
+                { deviceId }
+            ]
+        }).sort({ createdAt: -1 });
 
         return items;
     }

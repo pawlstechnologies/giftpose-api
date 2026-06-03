@@ -19,6 +19,8 @@ interface CSVRow {
 export const bulkUploadCSVService = async (filePath: string) => {
   const rows: CSVRow[] = [];
 
+  
+
   return new Promise((resolve, reject) => {
     fs.createReadStream(filePath)
       .pipe(csv())

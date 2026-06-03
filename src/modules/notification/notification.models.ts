@@ -6,7 +6,7 @@ const NotificationSchema = new Schema({
     userId: { type: Schema.Types.ObjectId, ref: 'User' },
     title: String,
     message: String,
-    type: { type: String, enum: ['Item_Posted', 'New_Item_Alert'], default: 'New_Item_Alert' },
+    type: { type: String, enum: ['Item_Posted', 'New_Item_Alert', 'Item_Request'], default: 'New_Item_Alert' },
     read: { type: Boolean, default: false },
     img: { type: String, required: true },
     data: Object

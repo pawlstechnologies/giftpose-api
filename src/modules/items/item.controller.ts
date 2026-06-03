@@ -98,7 +98,7 @@ export const postItemRequest = async (req: AuthRequest, res: Response) => {
             message: err.message
         });
     }
-};  
+};
 
 
 interface UpdateItemParams {
@@ -174,6 +174,7 @@ export const getItemsNearMe = async (req: Request, res: Response) => {
         res.status(error.statusCode || 500).json({ message: error.message });
     }
 }
+
 interface GetItemParams {
     deviceId: string;
     itemId: string;
@@ -258,6 +259,74 @@ export const markItemAsTaken = async (req: any, res: any) => {
         status: result.status,
         message: result.message
     });
+};
+
+
+
+interface InterestBody {
+    message: string;
+}
+
+interface InterestParams {
+    itemId: string;
+}
+
+export const markItemAsInterested = async (
+    req: AuthRequest<InterestParams, InterestBody>,
+    res: Response
+) => {
+    try {
+
+        const { itemId } = req.params;
+
+        const { message } = req.body;
+
+        const userId = req.user?.id;
+
+        const deviceId = req.user?.deviceId;
+
+        if (!userId) {
+            return res.status(401).json({
+                status: false,
+                message: "Unauthorized"
+            });
+        }
+
+        if (!deviceId) {
+            return res.status(400).json({
+                status: false,
+                message: "Device ID not found"
+            });
+        }
+
+        if (!message) {
+            return res.status(400).json({
+                status: false,
+                message: "Message is required"
+            });
+        }
+
+        const result =
+            await itemService.indicateInterest(
+                itemId,
+                userId,
+                deviceId,
+                message
+            );
+
+        return res.status(result.statusCode).json({
+            status: result.status,
+            message: result.message,
+            data: result.data
+        });
+
+    } catch (error: any) {
+
+        return res.status(500).json({
+            status: false,
+            message: error.message
+        });
+    }
 };
 
 export const hideItem = async (req: any, res: any) => {
@@ -357,83 +426,109 @@ export const listAllItems = async (req: Request, res: Response, next: NextFuncti
 
 
 export const pickupOptions = async (req: any, res: any) => {
-  try {
-    const options = [
-      { name: 'Pickup' },
-      { name: 'Personal Delivery' },
-      { name: 'Agent Delivery (payment upon delivery)' }
-    ];
+    try {
+        const options = [
+            { name: 'Pickup' },
+            { name: 'Personal Delivery' },
+            { name: 'Agent Delivery (payment upon delivery)' }
+        ];
 
-    return res.status(200).json({
-      status: true,
-      message: "Pickup options fetched successfully",
-      data: options
-    });
+        return res.status(200).json({
+            status: true,
+            message: "Pickup options fetched successfully",
+            data: options
+        });
 
-  } catch (error: any) {
-    return res.status(500).send(
-      error?.message || "Failed to fetch pickup options"
-    );
-  }
+    } catch (error: any) {
+        return res.status(500).send(
+            error?.message || "Failed to fetch pickup options"
+        );
+    }
 };
 
 //report options
 
 export const getReportOptions = async (req: any, res: any) => {
-  try {
-    const options = [
-      { code: "NOT_AVAILABLE", label: "Item no longer available" },
-      { code: "WRONG_LOCATION", label: "Incorrect location" },
-      { code: "MISLEADING", label: "Misleading description" },
-      { code: "PROHIBITED", label: "Prohibited item" },
-      { code: "NOT_FREE", label: "Not free / asking for money" },
-      { code: "SCAM", label: "Suspicious or scam" },
-      { code: "INAPPROPRIATE", label: "Inappropriate content" },
-      { code: "SPAM", label: "Spam or duplicate" },
-      { code: "SAFETY", label: "Safety concern" },
-      { code: "OTHER", label: "Other" }
-    ];
+    try {
+        const options = [
+            { code: "NOT_AVAILABLE", label: "Item no longer available" },
+            { code: "WRONG_LOCATION", label: "Incorrect location" },
+            { code: "MISLEADING", label: "Misleading description" },
+            { code: "PROHIBITED", label: "Prohibited item" },
+            { code: "NOT_FREE", label: "Not free / asking for money" },
+            { code: "SCAM", label: "Suspicious or scam" },
+            { code: "INAPPROPRIATE", label: "Inappropriate content" },
+            { code: "SPAM", label: "Spam or duplicate" },
+            { code: "SAFETY", label: "Safety concern" },
+            { code: "OTHER", label: "Other" }
+        ];
 
-    return res.status(200).json({
-      status: true,
-      message: "Report options fetched successfully",
-      data: options
-    });
+        return res.status(200).json({
+            status: true,
+            message: "Report options fetched successfully",
+            data: options
+        });
 
-  } catch (error: any) {
-    return res.status(500).send(
-      error?.message || "Failed to fetch report options"
-    );
-  }
+    } catch (error: any) {
+        return res.status(500).send(
+            error?.message || "Failed to fetch report options"
+        );
+    }
 };
 
 export const reportItem = async (req: any, res: any) => {
-  try {
-    const { itemId } = req.params;
-    const { deviceId, reason } = req.body;
+    try {
+        const { itemId } = req.params;
+        const { deviceId, reason } = req.body;
 
-    // 🔍 Basic validation
-    if (!itemId) {
-      return res.status(400).send("Item ID is required");
+        // 🔍 Basic validation
+        if (!itemId) {
+            return res.status(400).send("Item ID is required");
+        }
+
+        const result = await itemService.reportItem(
+            itemId,
+            deviceId,
+            reason
+        );
+
+        return res.status(result.statusCode).json({
+            status: result.status,
+            message: result.message
+        });
+
+    } catch (error: any) {
+        console.error("REPORT ITEM ERROR:", error);
+
+        return res.status(500).send(
+            error?.message || "Failed to report item"
+        );
     }
+};
 
-    const result = await itemService.reportItem(
-      itemId,
-      deviceId,
-      reason
-    );
+export const getMyDonations = async (req: AuthRequest, res: Response) => {
+    try {
+        const user = req.user;
 
-    return res.status(result.statusCode).json({
-      status: result.status,
-      message: result.message
-    });
+        if (!user) {
+            return res.status(401).json({
+                message: 'Unauthorized'
+            });
+        }
 
-  } catch (error: any) {
-    console.error("REPORT ITEM ERROR:", error);
+        const items = await itemService.getMyItems(user.id, user.deviceId);
 
-    return res.status(500).send(
-      error?.message || "Failed to report item"
-    );
-  }
+        return res.status(200).json({
+            success: true,
+            message: 'Your items retrieved successfully',
+            count: items.length,
+            data: items
+        });
+
+    } catch (err: any) {
+        return res.status(400).json({
+            message: err.message
+        });
+    }
 };
 

@@ -7,7 +7,7 @@ const generateSlug = (text: string) =>
 
 const CategorySchema = new Schema<ICategory>(
   {
-    name: { type: String, required: true, unique: true },
+    name: { type: String, required: true, trim: true },
     slug: { type: String, unique: true, index: true },
     status: { type: String, enum: ["Active", "Inactive", "Deleted"], default: "Active" },
   },

@@ -64,6 +64,8 @@ router.post(
                     }
                 );
 
+                console.log("PAYMENT SUCCEEDED");
+
                 break;
             }
 
@@ -82,6 +84,7 @@ router.post(
                     }
                 );
 
+                console.log("PAYMENT FAILED");
                 break;
             }
 
@@ -96,10 +99,10 @@ router.post(
                             subscription.id,
                     },
                     {
-                        status: "cancelled",
+                        status: "canceled",
                     }
                 );
-
+                console.log("SUBSCRIPTION DELETED");
                 break;
             }
         }
