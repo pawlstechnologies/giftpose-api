@@ -56,7 +56,7 @@ export const getCategoriesByKeywords = async (req: Request, res: Response) => {
             });
         }
 
-        const result = await alertService.getCategoriesByKeywords(
+        const result = await alertService.searchByKeywords(
             value.keywords
         );
 
