@@ -63,7 +63,7 @@ export const getCategoriesByKeywords = async (req: Request, res: Response) => {
         return res.json({
             success: true,
             message: 'Retrieved siccessfully',
-            keywords: value.keywords,
+            contents: value.keywords,
             data: result
         });
 
