@@ -136,6 +136,21 @@ export const resetPassword = async (req: Request, res: Response) => {
     }
 }
 
+export const allUser = async (req: Request, res: Response) => {
+
+    try {
+        const { page, limit } = req.query;
+
+        const result = await authService.listUsers(Number(page), Number(limit));
+        res.status(result.statusCode).json(result);
+
+    } catch (error: any) {
+        res.status(error.statusCode || 500).json({ message: error.message });
+    }
+}
+
+
+
 export const deleteUser = async (req: Request, res: Response) => {
 
     try {
@@ -156,6 +171,8 @@ export const deleteUser = async (req: Request, res: Response) => {
     }
 
 }
+
+
 
 export const logout = async (req: AuthRequest, res: Response) => {
 

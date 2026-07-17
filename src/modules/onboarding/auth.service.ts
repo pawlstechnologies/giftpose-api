@@ -235,8 +235,8 @@ export class AuthService {
                 message: 'User not found',
             };
         }
-            
-            //throw new ApiError(404, 'User not found');
+
+        //throw new ApiError(404, 'User not found');
 
         if (user.verificationCode !== code) {
             return {
@@ -309,7 +309,7 @@ export class AuthService {
 
         const user = await UserModel.findOne({ email });
 
-        if (!user) {    
+        if (!user) {
             return {
                 status: false,
                 statusCode: 404,
@@ -361,6 +361,29 @@ export class AuthService {
             message: 'Password reset successful',
         };
     }
+
+    async listUsers(page = 1, limit = 20) {
+        const skip = (page - 1) * limit;
+
+        const [users, total] = await Promise.all([
+            UserModel.find().skip(skip).limit(limit).lean(),
+            UserModel.countDocuments(),
+        ]);
+
+        return {
+            status: true,
+            statusCode: 200,
+            message: 'Users fetched successfully',
+            data: users,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
+    }
+
 
 
     async deleteUser(email: string) {
