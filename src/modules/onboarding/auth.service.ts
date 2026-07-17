@@ -362,7 +362,7 @@ export class AuthService {
         };
     }
 
-    async listUsers(page = 1, limit = 20) {
+    async listUsers(page = 1, limit = 200) {
         const skip = (page - 1) * limit;
 
         const [users, total] = await Promise.all([
