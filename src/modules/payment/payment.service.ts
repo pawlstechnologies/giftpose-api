@@ -1,8 +1,11 @@
+
+import crypto from "crypto";
 import axios from "axios";
 import LocationModel from '../location/location.model';
 import ApiError from '../../utils/ApiError';
 import { PaymentModel } from "./payment.model";
 import { stripe } from '../../config/stripe';
+
 
 export class PaymentService {
     async createPaymentIntent(deviceId: string) {
@@ -52,67 +55,37 @@ export class PaymentService {
             clientSecret: paymentIntent.client_secret,
         };
     }
-    
-    // async createPaymentIntent(deviceId: string) {
-    //     if (!deviceId?.trim()) {
-    //         throw new ApiError(400, 'Device ID is required');
-    //     }
 
-    //     const location = await LocationModel.findOne({ deviceId });
+    async getPayments(deviceId?: string, userId?: string) {
 
-    //     if (!location) {
-    //         throw new ApiError(404, "Location not found for the provided device ID");
-    //     }
+        const conditions: Record<string, string>[] = [];
 
-    //     // ✅ Prevent duplicate active payment
-    //     // const existing = await PaymentModel.findOne({
-    //     //     deviceId,
-    //     //     status: "pending",
-    //     // });
+        if (deviceId?.trim()) {
+            conditions.push({ deviceId });
+        }
 
-    //     // if (existing) {
-    //     //     return {
-    //     //         clientSecret: existing.clientSecret,
-    //     //     };
-    //     // }
+        if (userId?.trim()) {
+            conditions.push({ userId });
+        }
 
-    //     // ✅ Create PaymentIntent in Stripe
-    //     const paymentIntent = await stripe.paymentIntents.create(
-    //         {
-    //             amount: 500, // £5.00
-    //             currency: "gbp",
+        if (!conditions.length) {
+            throw new ApiError(
+                400,
+                "deviceId or userId is required"
+            );
+        }
 
-    //             metadata: {
-    //                 deviceId,
-    //                 type: "REMOVE_ADS",
-    //             },
+        const query =
+            conditions.length > 1
+                ? { $or: conditions }
+                : conditions[0];
 
-    //             automatic_payment_methods: {
-    //                 enabled: true,
-    //             },
-    //         },
-    //         {
-    //             idempotencyKey: `payment-${deviceId}`,
-    //         }
-    //     );
+        const payments =
+            await PaymentModel.find(query).sort({
+                createdAt: -1,
+            });
 
-    //     // ✅ Save in DB
-    //     await PaymentModel.create({
-    //         deviceId,
-    //         paymentIntentId: paymentIntent.id,
-    //         amount: paymentIntent.amount,
-    //         currency: paymentIntent.currency,
-    //         clientSecret: paymentIntent.client_secret ?? undefined,
-    //         status: "pending",
-    //         payment_method_types: ["card"],
-    //         metadata: paymentIntent.metadata,
-    //     });
+        return payments;
+    }
 
-    //     paymentIntent.metadata = { deviceId };
-
-    //     return {
-    //         clientSecret: paymentIntent.client_secret,
-    //         // paymentIntentId: paymentIntent.id
-    //     };
-    // }
 }

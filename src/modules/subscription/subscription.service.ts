@@ -129,7 +129,7 @@ export class SubscriptionService {
 
                 // CANCELED / EXPIRED
                 if (
-                    stripeStatus === "cancelled" ||
+                    stripeStatus === "canceled" ||
                     stripeStatus ===
                     "incomplete_expired" ||
                     stripeStatus ===
@@ -275,6 +275,38 @@ export class SubscriptionService {
         return {
             success: true,
         };
+    }
+
+    async getSubscriptions(deviceId?: string, userId?: string) {
+
+        const conditions: Record<string, string>[] = [];
+
+        if (deviceId?.trim()) {
+            conditions.push({ deviceId });
+        }
+
+        if (userId?.trim()) {
+            conditions.push({ userId });
+        }
+
+        if (!conditions.length) {
+            throw new ApiError(
+                400,
+                "deviceId or userId is required"
+            );
+        }
+
+        const query =
+            conditions.length > 1
+                ? { $or: conditions }
+                : conditions[0];
+
+        const subscriptions =
+            await SubscriptionModel.find(query).sort({
+                createdAt: -1,
+            });
+
+        return subscriptions;
     }
 }
 

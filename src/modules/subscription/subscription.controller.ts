@@ -70,4 +70,34 @@ export const cancel = async (req: any, res: any) => {
 };
 
 
+export const list = async (req: any, res: any) => {
+    try {
+        const {
+            deviceId,
+            userId,
+        } = req.query;
+
+        const data =
+            await subscriptionService.getSubscriptions(
+                deviceId,
+                userId
+            );
+
+        return res.status(200).json({
+            success: true,
+            message: "Subscriptions fetched",
+            data,
+        });
+
+    } catch (error: any) {
+        console.error("LIST SUBSCRIPTIONS ERROR:", error);
+
+        return res.status(500).send(
+            error?.message || "Failed to fetch subscriptions"
+        );
+    }
+};
+
+
+
 

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { setAuthCookies } from '../../utils/cookies';
 import { AuthRequest } from '../../middleware/auth.middleware';
+import { stat } from 'node:fs';
 
 const authService = new AuthService();
 
@@ -187,6 +188,7 @@ export const logout = async (req: AuthRequest, res: Response) => {
         // res.clearCookie('refreshToken');
 
         return res.status(200).json({
+            status: true,
             message: 'Logged out successfully'
         });
 

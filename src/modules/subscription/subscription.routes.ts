@@ -6,11 +6,12 @@ import express from "express";
 //   subscriptionController,
 // } from "../subscription/subscription.controller";
 
-import { create, cancel } from './subscription.controller';
+import { create, cancel, list } from './subscription.controller';
 
 const router = express.Router();
 
 router.post("/create", create);
 router.post("/cancel", cancel);
+router.get("/list", list);
 
 export default router;
