@@ -341,6 +341,51 @@ export class SubscriptionService {
         return subscription;
     }
 
+    async updateStatus(
+        subscriptionId: string,
+        status: string
+    ) {
+
+        if (!subscriptionId?.trim()) {
+            throw new ApiError(
+                400,
+                "subscriptionId is required"
+            );
+        }
+
+        const allowedStatuses = [
+            "active",
+            "inactive",
+            "canceled",
+            "past_due",
+            "incomplete",
+            "incomplete_expired",
+        ];
+
+        if (!allowedStatuses.includes(status)) {
+            throw new ApiError(
+                400,
+                `Invalid status. Allowed values: ${allowedStatuses.join(", ")}`
+            );
+        }
+
+        const subscription =
+            await SubscriptionModel.findOneAndUpdate(
+                { stripeSubscriptionId: subscriptionId },
+                { status },
+                { new: true }
+            );
+
+        if (!subscription) {
+            throw new ApiError(
+                404,
+                "Subscription not found"
+            );
+        }
+
+        return subscription;
+    }
+
 }
 
 export const subscriptionService =

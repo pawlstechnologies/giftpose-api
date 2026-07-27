@@ -6,7 +6,7 @@ import express from "express";
 //   subscriptionController,
 // } from "../subscription/subscription.controller";
 
-import { create, cancel, list, getCurrent } from './subscription.controller';
+import { create, cancel, list, getCurrent, updateStatus } from './subscription.controller';
 
 const router = express.Router();
 
@@ -14,5 +14,6 @@ router.post("/create", create);
 router.post("/cancel", cancel);
 router.get("/list", list);
 router.get("/current", getCurrent);
+router.patch("/status", updateStatus);
 
 export default router;
