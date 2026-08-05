@@ -15,12 +15,15 @@ export const create = async (req: any, res: any) => {
     try {
         const {
             deviceId,
+            userId,
             plan,
+
         } = req.body;
 
         const data =
             await subscriptionService.createSubscription(
                 deviceId,
+                userId,
                 plan
             );
 

@@ -9,6 +9,7 @@ import ApiError from "../../utils/ApiError";
 export class SubscriptionService {
     async createSubscription(
         deviceId: string,
+        userId: string,
         plan: PlanType
     ) {
 
@@ -18,6 +19,14 @@ export class SubscriptionService {
                 "Device ID required"
             );
         }
+
+        if (!userId?.trim()) {
+            throw new ApiError(
+                400,
+                "User ID required"
+            );
+        }
+
 
         const priceId =
             plan === "monthly"
@@ -30,6 +39,11 @@ export class SubscriptionService {
             await SubscriptionModel.findOne({
                 deviceId,
             });
+
+        if (existing && existing.userId !== userId) {
+            existing.userId = userId;
+            await existing.save();
+        }
 
         // EXISTING SUBSCRIPTION
         if (existing) {
@@ -176,6 +190,7 @@ export class SubscriptionService {
 
                 metadata: {
                     deviceId,
+                    userId,
                     plan,
                 },
             }) as any;
@@ -195,8 +210,11 @@ export class SubscriptionService {
             );
         }
 
+     
+
         await SubscriptionModel.create({
             deviceId,
+            userId,
 
             stripeCustomerId:
                 customer.id,

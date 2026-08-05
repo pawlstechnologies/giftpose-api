@@ -13,6 +13,8 @@ const subscriptionSchema = new Schema<Subscription>(
 
     userId: {
       type: String,
+      required: true,
+      index: true,
     },
 
     stripeCustomerId: {
