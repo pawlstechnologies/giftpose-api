@@ -210,7 +210,7 @@ export class SubscriptionService {
             );
         }
 
-     
+
 
         await SubscriptionModel.create({
             deviceId,
@@ -328,7 +328,6 @@ export class SubscriptionService {
     }
 
     async getCurrentSubscription(deviceId?: string, userId?: string) {
-
         const conditions: Record<string, string>[] = [];
 
         if (deviceId?.trim()) {
@@ -340,24 +339,54 @@ export class SubscriptionService {
         }
 
         if (!conditions.length) {
-            throw new ApiError(
-                400,
-                "deviceId or userId is required"
-            );
+            throw new ApiError(400, "deviceId or userId is required");
         }
 
-        const query =
-            conditions.length > 1
-                ? { $or: conditions }
-                : conditions[0];
+        const query = {
+            $and: [
+                { status: "active" },
+                conditions.length > 1 ? { $or: conditions } : conditions[0],
+            ],
+        };
 
-        const subscription =
-            await SubscriptionModel.findOne(query).sort({
-                createdAt: -1,
-            });
+        const subscription = await SubscriptionModel.findOne(query).sort({
+            createdAt: -1,
+        });
 
         return subscription;
     }
+
+    // async getCurrentSubscription(deviceId?: string, userId?: string) {
+
+    //     const conditions: Record<string, string>[] = [];
+
+    //     if (deviceId?.trim()) {
+    //         conditions.push({ deviceId });
+    //     }
+
+    //     if (userId?.trim()) {
+    //         conditions.push({ userId });
+    //     }
+
+    //     if (!conditions.length) {
+    //         throw new ApiError(
+    //             400,
+    //             "deviceId or userId is required"
+    //         );
+    //     }
+
+    //     const query =
+    //         conditions.length > 1
+    //             ? { $or: conditions }
+    //             : conditions[0];
+
+    //     const subscription =
+    //         await SubscriptionModel.findOne(query).sort({
+    //             createdAt: -1,
+    //         });
+
+    //     return subscription;
+    // }
 
     async updateStatus(
         subscriptionId: string,
