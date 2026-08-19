@@ -2,204 +2,212 @@ import { CategoryModel } from "../category/category.model";
 import { SubCategoryModel } from "../category/category.model";
 import { ContentModel } from "../category/category.model";
 import ItemModel from "../items/item.model";
-import DeepSeekClient from "../../utils/deepseek.client";
 import OpenAIClient from "../../utils/openai.client";
 import { Types } from "mongoose";
 
+type TaxonomyNode = {
+    _id: Types.ObjectId;
+    name: string;
+};
+
 class AICategorisationService {
 
-
     async getTaxonomy() {
+        const [categories, subcategories] = await Promise.all([
+            CategoryModel.find({ status: { $ne: "Deleted" } }, { name: 1 }).lean(),
+            SubCategoryModel.find({ status: { $ne: "Deleted" } }, { name: 1, categoryId: 1 }).lean(),
+        ]);
 
-        // const categories = await CategoryModel.find().lean();
-        // const subcategories = await SubCategoryModel.find().lean();
-        // const contents = await ContentModel.find().lean();
+        return categories.map((category) => ({
+            name: category.name,
+            subcategories: subcategories
+                .filter((sub) => String(sub.categoryId) === String(category._id))
+                .map((sub) => sub.name),
+        }));
+    }
 
-        const categories = await CategoryModel.find({}, { name: 1 }).lean();
-        const subcategories = await SubCategoryModel.find({}, { name: 1, categoryId: 1 }).lean();
-        const contents = await ContentModel.find({}, { name: 1, subcategoryId: 1 }).lean();
+    async getFallbackTaxonomy() {
+        const category = await this.findOrCreateCategory("Uncategorised", "Inactive");
+        const subcategory = await this.findOrCreateSubCategory("General", category._id, "Inactive");
+        const content = await this.findOrCreateContent("General Item", subcategory._id, "Inactive");
 
-        return {
-            categories,
-            subcategories,
-            contents
-        };
+        return { category, subcategory, content };
     }
 
     async categoriseItems(items: any[]) {
-
         const taxonomy = await this.getTaxonomy();
+        const fallback = await this.getFallbackTaxonomy();
+        const categorised: any[] = [];
+        const delayMs = Number(process.env.AI_CATEGORISE_DELAY_MS || 1500);
 
-        for (const item of items) {
+        for (let index = 0; index < items.length; index++) {
+            const item = items[index];
 
             try {
-
-                const image =
-                    item.thumbnail ||
-                    (item.imageUrls?.length ? item.imageUrls[0] : undefined);
-
                 const ai = await OpenAIClient.categoriseItem(
                     {
                         title: item.name,
                         description: item.description,
-                        image: image
                     },
                     taxonomy
                 );
 
-                const category = await this.resolveCategory(ai);
-                const subcategory = await this.resolveSubCategory(ai, category._id);
-                const content = await this.resolveContent(ai, subcategory._id);
+                const category = await this.resolveCategory(ai, fallback.category);
+                const subcategory = await this.resolveSubCategory(ai, category.doc._id, fallback);
+                const content = await this.resolveContent(ai, subcategory.doc._id, fallback);
 
-                await ItemModel.updateOne(
-                    { _id: item._id },
-                    {
-                        $set: {
-                            categoryId: category._id,
-                            subCategoryId: subcategory._id,
-                            contentId: content._id,
-                            isCategorised: true
-                        }
-                    }
-                );
+                const matched = category.matched;
 
-            } catch (err) {
-                console.error("AI categorisation failed:", err);
+                const updates: Record<string, unknown> = {
+                    categoryId: category.doc._id,
+                    subCategoryId: subcategory.doc._id,
+                    contentId: content.doc._id,
+                    isCategorised: matched,
+                };
+
+                if (matched) {
+                    updates.status = "Live";
+                }
+
+                await ItemModel.updateOne({ _id: item._id }, { $set: updates });
+
+                if (matched) {
+                    categorised.push({
+                        ...item,
+                        categoryId: category.doc._id,
+                        subCategoryId: subcategory.doc._id,
+                        contentId: content.doc._id,
+                        isCategorised: true,
+                        status: "Live",
+                    });
+                }
+            } catch (err: any) {
+                console.error("AI categorisation failed:", err?.message || err);
+            }
+
+            if (index < items.length - 1 && delayMs > 0) {
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
             }
         }
+
+        return categorised;
     }
 
-    // async categoriseItems(items: any[]) {
-
-    //     const taxonomy = await this.getTaxonomy();
-
-    //     for (const item of items) {
-
-    //         try {
-
-
-    //             const imageUrl =
-    //                 item.thumbnail ||
-    //                 (item.imageUrls?.length ? item.imageUrls[0] : undefined);
-
-
-    //             const ai = await OpenAIClient.categoriseItem(
-    //                 {
-    //                     title: item.name,
-    //                     description: item.description,
-    //                     image
-    //                 },
-    //                 taxonomy
-    //             );
-
-    //             const category = await this.resolveCategory(ai);
-    //             const subcategory = await this.resolveSubCategory(ai, category._id);
-    //             const content = await this.resolveContent(ai, subcategory._id);
-
-    //             await ItemModel.updateOne(
-    //                 { _id: item._id },
-    //                 {
-    //                     $set: {
-    //                         categoryId: category._id,
-    //                         subCategoryId: subcategory._id,
-    //                         contentId: content._id,
-    //                         isCategorised: true
-    //                     }
-    //                 }
-    //             );
-
-    //         } catch (err) {
-    //             console.error("AI categorisation failed:", err);
-    //         }
-    //     }
-    // }
-
-    async resolveCategory(ai: any) {
-
-        let category = await CategoryModel.findOne({
-            name: ai.category
-        });
-
-        if (!category && ai.suggestedCategory) {
-
-            category = await CategoryModel.create({
-                name: ai.suggestedCategory,
-                status: "Inactive"
-            });
-        }
-
-        // fallback safety
-        if (!category) {
-
-            category = await CategoryModel.create({
-                name: "Uncategorised",
-                status: "Inactive"
-            });
-        }
-
-        return category;
+    private escapeRegex(text: string) {
+        return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
 
-    async resolveSubCategory(ai: any, categoryId: Types.ObjectId) {
+    private async findByName<T>(
+        model: { findOne: Function },
+        name?: string,
+        extra: Record<string, unknown> = {}
+    ): Promise<T | null> {
+        if (!name?.trim()) return null;
 
-        let subcategory = await SubCategoryModel.findOne({
-            name: ai.subcategory,
-            categoryId
+        return model.findOne({
+            ...extra,
+            name: { $regex: new RegExp(`^${this.escapeRegex(name.trim())}$`, "i") },
         });
+    }
 
-        if (!subcategory && ai.suggestedSubcategory) {
+    private async findOrCreateCategory(name: string, status: "Active" | "Inactive") {
+        const existing = await this.findByName<TaxonomyNode>(CategoryModel, name);
+        if (existing) return existing;
 
-            subcategory = await SubCategoryModel.create({
-                name: ai.suggestedSubcategory,
+        return CategoryModel.create({ name: name.trim(), status });
+    }
+
+    private async findOrCreateSubCategory(
+        name: string,
+        categoryId: Types.ObjectId,
+        status: "Active" | "Inactive"
+    ) {
+        const existing = await this.findByName<TaxonomyNode>(SubCategoryModel, name, { categoryId });
+        if (existing) return existing;
+
+        return SubCategoryModel.create({
+            name: name.trim(),
+            categoryId,
+            status,
+        });
+    }
+
+    private async findOrCreateContent(
+        name: string,
+        subcategoryId: Types.ObjectId,
+        status: "Active" | "Inactive"
+    ) {
+        const existing = await this.findByName<TaxonomyNode>(ContentModel, name, { subcategoryId });
+        if (existing) return existing;
+
+        return ContentModel.create({
+            name: name.trim(),
+            subcategoryId,
+            status,
+        });
+    }
+
+    private async resolveCategory(ai: any, fallback: TaxonomyNode) {
+        const existing = await this.findByName<TaxonomyNode>(CategoryModel, ai.category);
+        if (existing) return { doc: existing, matched: true };
+
+        if (ai.suggestedCategory?.trim()) {
+            const suggested = await this.findOrCreateCategory(ai.suggestedCategory, "Inactive");
+            return { doc: suggested, matched: true };
+        }
+
+        return { doc: fallback, matched: false };
+    }
+
+    private async resolveSubCategory(
+        ai: any,
+        categoryId: Types.ObjectId,
+        fallback: { category: TaxonomyNode; subcategory: TaxonomyNode }
+    ) {
+        const existing = await this.findByName<TaxonomyNode>(SubCategoryModel, ai.subcategory, { categoryId });
+        if (existing) return { doc: existing, matched: true };
+
+        if (ai.suggestedSubcategory?.trim()) {
+            const suggested = await this.findOrCreateSubCategory(
+                ai.suggestedSubcategory,
                 categoryId,
-                status: "Inactive"
-            });
+                "Inactive"
+            );
+            return { doc: suggested, matched: true };
         }
 
-        if (!subcategory) {
-
-            subcategory = await SubCategoryModel.create({
-                name: "General",
-                categoryId,
-                status: "Inactive"
-            });
+        if (String(categoryId) === String(fallback.category._id)) {
+            return { doc: fallback.subcategory, matched: false };
         }
 
-        return subcategory;
+        const general = await this.findOrCreateSubCategory("General", categoryId, "Inactive");
+        return { doc: general, matched: false };
     }
 
+    private async resolveContent(
+        ai: any,
+        subcategoryId: Types.ObjectId,
+        fallback: { subcategory: TaxonomyNode; content: TaxonomyNode }
+    ) {
+        const existing = await this.findByName<TaxonomyNode>(ContentModel, ai.content, { subcategoryId });
+        if (existing) return { doc: existing, matched: true };
 
-    async resolveContent(ai: any, subcategoryId: Types.ObjectId) {
-
-        let content = await ContentModel.findOne({
-            name: ai.content,
-            subcategoryId
-        });
-
-        if (!content && ai.suggestedContent) {
-
-            content = await ContentModel.create({
-                name: ai.suggestedContent,
+        if (ai.suggestedContent?.trim()) {
+            const suggested = await this.findOrCreateContent(
+                ai.suggestedContent,
                 subcategoryId,
-                status: "Inactive"
-            });
+                "Inactive"
+            );
+            return { doc: suggested, matched: true };
         }
 
-        if (!content) {
-
-            content = await ContentModel.create({
-                name: "General Item",
-                subcategoryId,
-                status: "Inactive"
-            });
+        if (String(subcategoryId) === String(fallback.subcategory._id)) {
+            return { doc: fallback.content, matched: false };
         }
 
-        return content;
+        const general = await this.findOrCreateContent("General Item", subcategoryId, "Inactive");
+        return { doc: general, matched: false };
     }
-
-
 }
 
 export default new AICategorisationService();
-
-

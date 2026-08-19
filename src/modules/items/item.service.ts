@@ -753,12 +753,10 @@ export default class ItemService {
             if (!alerts.length) return;
 
 
-            // --- 4️⃣ AI semantic matching ---
             const matchedDevices: any[] = [];
-            const itemText = `${item.name} ${item.description || ''}`;
 
             for (const alert of alerts) {
-                const match = await OpenAIClient.isItemMatchingKeywords(itemText, alert.keywords, 0.6);
+                const match = await OpenAIClient.matchesAlert(item, alert, 0.55);
                 if (match) {
                     matchedDevices.push({
                         deviceId: alert.deviceId,

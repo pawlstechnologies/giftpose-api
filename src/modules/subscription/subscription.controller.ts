@@ -1,110 +1,89 @@
-import {
-    Request,
-    Response,
-    NextFunction,
-} from "express";
+import { Response } from "express";
+import { AuthRequest } from "../../middleware/auth.middleware";
+import { subscriptionService } from "./subscription.service";
+import ApiError from "../../utils/ApiError";
 
-import {
-    subscriptionService,
-} from "../subscription/subscription.service";
+const sendError = (res: Response, error: any) => {
+    const statusCode = error?.statusCode || 500;
+    return res.status(statusCode).json({
+        success: false,
+        message: error?.message || "Request failed",
+    });
+};
 
-
-
-
-export const create = async (req: any, res: any) => {
+export const create = async (req: AuthRequest<any, any, any>, res: Response) => {
     try {
-        const {
+        const deviceId = req.user?.deviceId || req.body.deviceId;
+        const userId = req.user?._id?.toString() || req.body.userId;
+        const { plan } = req.body;
+
+        const data = await subscriptionService.createSubscription(
             deviceId,
             userId,
-            plan,
-
-        } = req.body;
-
-        const data =
-            await subscriptionService.createSubscription(
-                deviceId,
-                userId,
-                plan
-            );
+            plan
+        );
 
         return res.status(200).json({
             success: true,
-            message:
-                "Subscription created",
+            message: "Subscription created",
             data,
         });
-
     } catch (error: any) {
         console.error("CREATE SUBSCRIPTION ERROR:", error);
-
-        return res.status(500).send(
-            error?.message || "Failed to create subscription"
-        );
+        return sendError(res, error);
     }
 };
 
-
-
-export const cancel = async (req: any, res: any) => {
+export const cancel = async (req: AuthRequest<any, any, any>, res: Response) => {
     try {
-        const {
-            subscriptionId,
-        } = req.body;
+        const { subscriptionId, cancelImmediately } = req.body;
 
-        const data =
-            await subscriptionService.cancelSubscription(
-                subscriptionId
-            );
+        if (!subscriptionId?.trim()) {
+            throw new ApiError(400, "subscriptionId is required");
+        }
+
+        const data = await subscriptionService.cancelSubscription(
+            subscriptionId,
+            Boolean(cancelImmediately),
+            req.user?._id?.toString()
+        );
 
         return res.status(200).json({
             success: true,
-            message:
-                "Subscription cancelled",
+            message: "Subscription cancelled",
             data,
         });
-
     } catch (error: any) {
         console.error("CANCEL SUBSCRIPTION ERROR:", error);
-
-        return res.status(500).send(
-            error?.message || "Failed to cancel subscription"
-        );
+        return sendError(res, error);
     }
 };
 
-
-export const list = async (req: any, res: any) => {
+export const list = async (req: AuthRequest<any, any, any>, res: Response) => {
     try {
-        const {
-            deviceId,
-            userId,
-        } = req.query;
+        const deviceId = req.user?.deviceId || (req.query.deviceId as string | undefined);
+        const userId = req.user?._id?.toString() || (req.query.userId as string | undefined);
 
-        const data =
-            await subscriptionService.getSubscriptions(
-                deviceId,
-                userId
-            );
+        const data = await subscriptionService.getSubscriptions(
+            deviceId,
+            userId
+        );
 
         return res.status(200).json({
             success: true,
             message: "Subscriptions fetched",
             data,
         });
-
     } catch (error: any) {
         console.error("LIST SUBSCRIPTIONS ERROR:", error);
-
-        return res.status(500).send(
-            error?.message || "Failed to fetch subscriptions"
-        );
+        return sendError(res, error);
     }
 };
 
-
-export const getCurrent = async (req: any, res: any) => {
+export const getCurrent = async (req: AuthRequest<any, any, any>, res: Response) => {
     try {
-        const { deviceId, userId } = req.query;
+        const deviceId = req.user?.deviceId || (req.query.deviceId as string | undefined);
+        const userId = req.user?._id?.toString() || (req.query.userId as string | undefined);
 
         const data = await subscriptionService.getCurrentSubscription(
             deviceId,
@@ -116,40 +95,30 @@ export const getCurrent = async (req: any, res: any) => {
             message: "Current subscription fetched",
             data,
         });
-
     } catch (error: any) {
         console.error("GET CURRENT SUBSCRIPTION ERROR:", error);
-        return res.status(error?.statusCode || 500).send(
-            error?.message || "Failed to fetch current subscription"
-        );
+        return sendError(res, error);
     }
 };
 
-export const updateStatus = async (req: any, res: any) => {
+export const updateStatus = async (req: AuthRequest<any, any, any>, res: Response) => {
     try {
         const { subscriptionId, status } = req.body;
+        const requesterUserId = req.user?._id?.toString();
 
-        const data =
-            await subscriptionService.updateStatus(
-                subscriptionId,
-                status
-            );
+        const data = await subscriptionService.updateStatus(
+            subscriptionId,
+            status,
+            requesterUserId
+        );
 
         return res.status(200).json({
             success: true,
             message: "Subscription status updated",
             data,
         });
-
     } catch (error: any) {
         console.error("UPDATE SUBSCRIPTION STATUS ERROR:", error);
-
-        return res.status(error?.statusCode || 500).send(
-            error?.message || "Failed to update subscription status"
-        );
+        return sendError(res, error);
     }
 };
-
-
-
-

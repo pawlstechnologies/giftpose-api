@@ -1,282 +1,37 @@
-
 import express from "express";
 import { stripe } from "../../config/stripe";
-import { SubscriptionModel } from "../subscription/subscription.model";
-import LocationModel from "../location/location.model";
+import { handleStripeEvent } from "./stripeWebhook.service";
 
 const router = express.Router();
 
-router.post(
-    "/stripe-webhook",
+router.post("/", async (req, res) => {
+    const signature = req.headers["stripe-signature"];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    express.raw({
-        type: "application/json",
-    }),
-
-    async (req, res) => {
-
-        const signature =
-            req.headers["stripe-signature"]!;
-
-        let event;
-
-        try {
-
-            event =
-                stripe.webhooks.constructEvent(
-                    req.body,
-                    signature,
-                    process.env
-                        .STRIPE_WEBHOOK_SECRET!
-                );
-
-        } catch (err) {
-
-            return res
-                .status(400)
-                .send("Webhook Error");
-        }
-
-        switch (event.type) {
-
-            case "invoice.paid": {
-
-                const invoice =
-                    event.data.object as any;
-
-                const subscriptionId =
-                    invoice.subscription;
-
-                const updatedSubscription =
-                    await SubscriptionModel.findOneAndUpdate(
-                        {
-                            stripeSubscriptionId:
-                                subscriptionId,
-                        },
-                        {
-                            status: "active",
-
-                            currentPeriodEnd:
-                                new Date(
-                                    invoice.lines.data[0]
-                                        .period.end * 1000
-                                ),
-                        },
-                        { new: true }
-                    );
-
-                if (updatedSubscription?.deviceId) {
-
-                    await LocationModel.findOneAndUpdate(
-                        {
-                            deviceId:
-                                updatedSubscription.deviceId,
-                        },
-                        {
-                            adEnabled: false,
-                            isPremium: true,
-                        }
-                    );
-                }
-
-                console.log("PAYMENT SUCCEEDED");
-
-                break;
-            }
-
-            case "invoice.payment_failed": {
-
-                const invoice =
-                    event.data.object as any;
-
-                const updatedSubscription =
-                    await SubscriptionModel.findOneAndUpdate(
-                        {
-                            stripeSubscriptionId:
-                                invoice.subscription,
-                        },
-                        {
-                            status: "past_due",
-                        },
-                        { new: true }
-                    );
-
-                if (updatedSubscription?.deviceId) {
-
-                    await LocationModel.findOneAndUpdate(
-                        {
-                            deviceId:
-                                updatedSubscription.deviceId,
-                        },
-                        {
-                            adEnabled: true,
-                            isPremium: false,
-                        }
-                    );
-                }
-
-                console.log("PAYMENT FAILED");
-                break;
-            }
-
-            case "customer.subscription.deleted": {
-
-                const subscription =
-                    event.data.object as any;
-
-                const updatedSubscription =
-                    await SubscriptionModel.findOneAndUpdate(
-                        {
-                            stripeSubscriptionId:
-                                subscription.id,
-                        },
-                        {
-                            status: "canceled",
-                        },
-                        { new: true }
-                    );
-
-                if (updatedSubscription?.deviceId) {
-
-                    await LocationModel.findOneAndUpdate(
-                        {
-                            deviceId:
-                                updatedSubscription.deviceId,
-                        },
-                        {
-                            adEnabled: true,
-                            isPremium: false,
-                        }
-                    );
-                }
-
-                console.log("SUBSCRIPTION DELETED");
-                break;
-            }
-        }
-
-        res.json({
-            received: true,
-        });
+    if (!signature || !webhookSecret || webhookSecret.includes("XXXX")) {
+        return res.status(400).send("Webhook secret is not configured");
     }
-);
+
+    let event;
+
+    try {
+        event = stripe.webhooks.constructEvent(
+            req.body,
+            signature,
+            webhookSecret
+        );
+    } catch (err) {
+        console.error("Stripe webhook signature failed:", (err as Error).message);
+        return res.status(400).send("Webhook Error");
+    }
+
+    try {
+        await handleStripeEvent(event);
+        return res.json({ received: true });
+    } catch (err) {
+        console.error("Stripe webhook handler failed:", err);
+        return res.status(500).send("Webhook handler failed");
+    }
+});
 
 export default router;
-
-
-
-// import express from "express";
-
-// import { stripe } from "../../config/stripe";
-
-// import { SubscriptionModel } from "../subscription/subscription.model";
-
-// const router = express.Router();
-
-// router.post(
-//     "/stripe-webhook",
-
-//     express.raw({
-//         type: "application/json",
-//     }),
-
-//     async (req, res) => {
-
-//         const signature =
-//             req.headers["stripe-signature"]!;
-
-//         let event;
-
-//         try {
-
-//             event =
-//                 stripe.webhooks.constructEvent(
-//                     req.body,
-//                     signature,
-//                     process.env
-//                         .STRIPE_WEBHOOK_SECRET!
-//                 );
-
-//         } catch (err) {
-
-//             return res
-//                 .status(400)
-//                 .send("Webhook Error");
-//         }
-
-//         switch (event.type) {
-
-//             case "invoice.payment_succeeded": {
-
-//                 const invoice =
-//                     event.data.object as any;
-
-//                 const subscriptionId =
-//                     invoice.subscription;
-
-//                 await SubscriptionModel.findOneAndUpdate(
-//                     {
-//                         stripeSubscriptionId:
-//                             subscriptionId,
-//                     },
-//                     {
-//                         status: "active",
-
-//                         currentPeriodEnd:
-//                             new Date(
-//                                 invoice.lines.data[0]
-//                                     .period.end * 1000
-//                             ),
-//                     }
-//                 );
-
-//                 console.log("PAYMENT SUCCEEDED");
-
-//                 break;
-//             }
-
-//             case "invoice.payment_failed": {
-
-//                 const invoice =
-//                     event.data.object as any;
-
-//                 await SubscriptionModel.findOneAndUpdate(
-//                     {
-//                         stripeSubscriptionId:
-//                             invoice.subscription,
-//                     },
-//                     {
-//                         status: "past_due",
-//                     }
-//                 );
-
-//                 console.log("PAYMENT FAILED");
-//                 break;
-//             }
-
-//             case "customer.subscription.deleted": {
-
-//                 const subscription =
-//                     event.data.object as any;
-
-//                 await SubscriptionModel.findOneAndUpdate(
-//                     {
-//                         stripeSubscriptionId:
-//                             subscription.id,
-//                     },
-//                     {
-//                         status: "canceled",
-//                     }
-//                 );
-//                 console.log("SUBSCRIPTION DELETED");
-//                 break;
-//             }
-//         }
-
-//         res.json({
-//             received: true,
-//         });
-//     }
-// );
-
-// export default router;

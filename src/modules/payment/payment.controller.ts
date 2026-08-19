@@ -1,54 +1,56 @@
-import { Request, Response, NextFunction } from "express";
-import { LocationService } from '../location/location.service';
+import { Response } from "express";
+import { AuthRequest } from "../../middleware/auth.middleware";
 import ApiError from "../../utils/ApiError";
 import { PaymentService } from "./payment.service";
 
-const locationService = new LocationService();
 const paymentService = new PaymentService();
 
-export const createPaymentIntent = async (req: Request, res: Response) => {
-  try {
-    const deviceId = req.body.deviceId;
-
-    if (!deviceId?.trim()) {
-      return res.status(400).json({ message: 'Device ID is required' });
-    }
-
-    const intent = await paymentService.createPaymentIntent(deviceId);
-
-    return res.status(200).json({
-      success: true,
-      message: "PaymentIntent created successfully",
-      data: {
-        clientSecret: intent.clientSecret,
-      },
+const sendError = (res: Response, error: any) => {
+    const statusCode = error?.statusCode || 500;
+    return res.status(statusCode).json({
+        success: false,
+        message: error?.message || "Request failed",
     });
-
-  } catch (error: any) {
-    console.error("CREATE PAYMENT INTENT ERROR:", error);
-
-    return res.status(error?.statusCode || 500).send(
-      error?.message || "Failed to create payment intent"
-    );
-  }
 };
 
+export const createPaymentIntent = async (req: AuthRequest<any, any, any>, res: Response) => {
+    try {
+        const deviceId = req.user?.deviceId || req.body.deviceId;
+        const userId = req.user?._id?.toString();
 
-export const listPayments = async (req: Request, res: Response) => {
-  const { deviceId, userId } = req.query as {
-    deviceId?: string;
-    userId?: string;
-  };
+        if (!deviceId?.trim()) {
+            throw new ApiError(400, "Device ID is required");
+        }
 
-  const data = await paymentService.getPayments(deviceId, userId);
+        const intent = await paymentService.createPaymentIntent(deviceId, userId);
 
-  return res.status(200).json({
-    success: true,
-    message: "Payments fetched",
-    data,
-  });
+        return res.status(200).json({
+            success: true,
+            message: "PaymentIntent created successfully",
+            data: {
+                clientSecret: intent.clientSecret,
+            },
+        });
+    } catch (error: any) {
+        console.error("CREATE PAYMENT INTENT ERROR:", error);
+        return sendError(res, error);
+    }
 };
 
+export const listPayments = async (req: AuthRequest<any, any, any>, res: Response) => {
+    try {
+        const deviceId = req.user?.deviceId || (req.query.deviceId as string | undefined);
+        const userId = req.user?._id?.toString() || (req.query.userId as string | undefined);
 
+        const data = await paymentService.getPayments(deviceId, userId);
 
-
+        return res.status(200).json({
+            success: true,
+            message: "Payments fetched",
+            data,
+        });
+    } catch (error: any) {
+        console.error("LIST PAYMENTS ERROR:", error);
+        return sendError(res, error);
+    }
+};

@@ -22,29 +22,33 @@ import { globalLimiter, helmetMiddleware } from "./middleware/security";
 
 const app = express();
 
-// app.use(cors());
 app.use(morgan("dev"));
-app.use(express.json());
 app.use(cookieParser());
 app.use(helmetMiddleware);
-app.use(globalLimiter);
-
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL, // frontend URL
-    credentials: true,               // allow cookies/headers
+    origin: process.env.FRONTEND_URL,
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
   })
 );
 
+// Stripe needs the unmodified request body for signature verification.
+app.use(
+  "/api/stripe-webhook",
+  express.raw({ type: "application/json" }),
+  subscriptionWebhook
+);
+
+app.use(express.json());
+app.use(globalLimiter);
 
 app.get("/api", (_req, res) => {
   res.json({ message: "Welcome to GiftPose API - the best thing after Jollof Rice 🚀" });
 });
 
-///list of routes
 app.use("/api/location", locationRoutes);
 app.use("/api/item", itemRoutes);
 app.use("/api/categories", categoryRoutes);
@@ -52,7 +56,6 @@ app.use("/api/alerts", alertRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/subscription", subscriptionRoutes);
-app.use("/api/stripe-webhook", subscriptionWebhook);
 
 app.use("/api/auth", authRoutes);
 

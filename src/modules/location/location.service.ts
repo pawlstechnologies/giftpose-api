@@ -98,14 +98,14 @@ export class LocationService {
             {
                 $geoNear: {
                     near: { type: "Point", coordinates: [lng, lat] },
-                    distanceField: "distanceInMeteres",
+                    distanceField: "distanceInMeters",
                     maxDistance: maxDistanceMeters,
                     spherical: true
                 }
             },
             {
                 $match: {
-                    firebaseToken: { $exists: true, $ne: null }
+                    firebaseToken: { $exists: true, $nin: [null, ""] }
                 }
             },
             {
@@ -126,7 +126,7 @@ export class LocationService {
         console.log(`📡 Devices found (before filtering): ${devices.length}`);
 
         devices.forEach((d: any) => {
-            if (!d.distanceInMiles) {
+            if (d.distanceInMiles == null) {
                 console.log(`⚠️ Device ${d.deviceId} missing distance`);
                 return;
             }

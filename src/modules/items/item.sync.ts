@@ -14,11 +14,18 @@ import NotificationModels from "../notification/notification.models"; //"../noti
 
 // const pushService = new PushNotificationService();
 
+const PICKUP_OPTIONS = [
+    'Pickup',
+    'Personal Delivery',
+    'Agent Delivery (payment upon delivery)'
+] as const;
+
 const formatToSecond = (date: Date): string =>
-    date.toISOString().split('.')[0];
+    `${date.toISOString().split('.')[0]}Z`;
 
 class TrashNothingSyncService {
     private lastSync: Date;
+    private isRunning = false;
 
     constructor() {
         // Start from 1 minute ago on boot
@@ -117,6 +124,13 @@ class TrashNothingSyncService {
     // }
 
     async syncTrashNothing() {
+        if (this.isRunning) {
+            console.log('[CRON] Previous sync still running, skipping tick');
+            return;
+        }
+
+        this.isRunning = true;
+
         try {
             const now = new Date();
 
@@ -126,82 +140,93 @@ class TrashNothingSyncService {
                 dateMin: formatToSecond(this.lastSync),
                 dateMax: formatToSecond(now),
                 page: 1,
-                perPage: 50
+                perPage: 20
             });
 
             if (!posts.length) {
                 console.log('[CRON] No new posts');
-                this.lastSync = now;
-                return;
+            } else {
+                const fallback = await aiCategorisationService.getFallbackTaxonomy();
+                const validPosts = posts.filter((post: any) =>
+                    Number.isFinite(post.longitude) && Number.isFinite(post.latitude)
+                );
+
+                const bulkOps = validPosts.map((post: any) => {
+                    const expiration = post.expiration ? new Date(post.expiration) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+                    return {
+                        updateOne: {
+                            filter: { postId: post.post_id },
+                            update: {
+                                $setOnInsert: {
+                                    name: post.title,
+                                    description: post.content,
+                                    imageUrls: post.photos?.map((p: any) => p.url) || [],
+                                    city: '',
+                                    postCode: 'UNKNOWN',
+                                    location: {
+                                        type: 'Point',
+                                        coordinates: [post.longitude, post.latitude]
+                                    },
+                                    partner: 'TrashNothing',
+                                    isTaken: false,
+                                    thumbnail: post.photos?.[0]?.thumbnail || post.photos?.[0]?.url || '',
+                                    url: post.url,
+                                    type: post.type === 'request' ? 'request' : 'offer',
+                                    pickup: (PICKUP_OPTIONS as readonly string[]).includes(post.pickup)
+                                        ? post.pickup
+                                        : 'Pickup',
+                                    country: post.country || 'UK',
+                                    postId: post.post_id,
+                                    expiration: Number.isNaN(expiration.getTime())
+                                        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                                        : expiration,
+                                    status: 'Processing',
+                                    isCategorised: false,
+                                    categoryId: fallback.category._id,
+                                    subCategoryId: fallback.subcategory._id,
+                                    contentId: fallback.content._id
+                                }
+                            },
+                            upsert: true
+                        }
+                    };
+                });
+
+                if (bulkOps.length) {
+                    await ItemModel.bulkWrite(bulkOps);
+                }
+
+                console.log(`[CRON] Updated ${validPosts.length} posts`);
             }
 
-            const bulkOps = posts.map((post: any) => ({
-                updateOne: {
-                    filter: { postId: post.post_id },
-                    update: {
-                        $setOnInsert: {
-                            name: post.title,
-                            description: post.content,
-                            imageUrls: post.photos?.map((p: any) => p.url) || [],
-                            city: '',
-                            postCode: 'UNKNOWN',
-                            location: {
-                                type: 'Point',
-                                coordinates: [post.longitude, post.latitude]
-                            },
-                            partner: 'TrashNothing',
-                            isTaken: false,
-                            thumbnail: post.photos?.[0]?.thumbnail || '',
-                            url: post.url,
-                            type: post.type,
-                            pickup: post.pickup,
-                            country: post.country,
-                            postId: post.post_id,
-                            expiration: new Date(post.expiration),
-                            status: 'Processing',
-                            isCategorised: false
-                        }
-                    },
-                    upsert: true
-                }
-            }));
-
-            await ItemModel.bulkWrite(bulkOps);
-
-            console.log(`[CRON] Updated ${posts.length} posts`);
-
-            /**
-             * Get new uncategorised items
-             */
+            const maxPerTick = Number(process.env.AI_CATEGORISE_BATCH_SIZE || 8);
             const newItems = await ItemModel.find({
-                postId: { $in: posts.map((p: any) => p.post_id) },
-                isCategorised: false
-            }).lean();
+                partner: "TrashNothing",
+                isCategorised: false,
+            })
+                .sort({ createdAt: 1 })
+                .limit(maxPerTick)
+                .lean();
 
             if (!newItems.length) {
                 this.lastSync = now;
                 return;
             }
 
-            /**
-             * AI categorisation
-             */
             console.log(`[CRON] AI categorising ${newItems.length} items`);
-            await aiCategorisationService.categoriseItems(newItems);
+            const categorisedItems = await aiCategorisationService.categoriseItems(newItems);
 
-            /**
-             * 🔥 NEW: Geo + AI Notifications
-             */
-            console.log(`[CRON] Running notifications for ${newItems.length} items`);
-
+            console.log(`[CRON] Running notifications for ${categorisedItems.length} categorised items`);
 
             const locationService = new LocationService();
 
-            for (const item of newItems) {
+            for (const item of categorisedItems) {
                 try {
-                    console.log(`\n🔔 Processing item: ${item.name}`);
+                    if (!item.location?.coordinates?.length) {
+                        continue;
+                    }
 
-                    // --- 1️⃣ Get nearby devices ---
                     const devices = await locationService.getDevicesNearItem(
                         item.location.coordinates[0],
                         item.location.coordinates[1]
@@ -212,13 +237,7 @@ class TrashNothingSyncService {
                         continue;
                     }
 
-                    console.log(`📡 Nearby devices: ${devices.length}`);
-
-                    // --- 2️⃣ Get alerts ---
                     const deviceIds = devices.map((d: any) => d.deviceId);
-
-
-
                     const alerts = await DeviceAlertModel.find({
                         status: 'Active',
                         deviceId: { $in: deviceIds }
@@ -229,23 +248,14 @@ class TrashNothingSyncService {
                         continue;
                     }
 
-                    console.log(`🎯 Alerts found: ${alerts.length}`);
-
-                    // --- 3️⃣ AI matching ---
-                    const itemText = `${item.name} ${item.description || ''}`;
-
                     const matches = await Promise.all(
                         alerts.map(async (alert) => {
-                            const match = await OpenAIClient.isItemMatchingKeywords(
-                                itemText,
-                                alert.keywords,
-                                0.05 // 🔥 slightly relaxed threshold
-                            );
+                            const match = await OpenAIClient.matchesAlert(item, alert);
 
                             if (!match) return null;
 
                             const device = devices.find(
-                                (d) => d.deviceId === alert.deviceId
+                                (d: any) => d.deviceId === alert.deviceId
                             );
 
                             return {
@@ -258,33 +268,29 @@ class TrashNothingSyncService {
 
                     const matchedDevices = matches.filter(Boolean) as any[];
 
-                    console.log(`🎯 Matched devices: ${matchedDevices.length}`);
-
                     if (!matchedDevices.length) continue;
 
-                    // --- 4️⃣ Send push ---
                     const tokens = matchedDevices
                         .map((d) => d.firebaseToken)
                         .filter(Boolean);
 
-                    console.log('📲 Tokens:', tokens);
-
                     if (tokens.length) {
-
                         await sendBulkPushNotification(
                             tokens,
                             `${item.name} near you 📍`,
-                            `${item.description}`
+                            `${item.description || ''}`.trim()
                         );
                     }
 
-                    // --- 5️⃣ In-app notifications ---
-                    for (const d of matchedDevices) {
+                    const img = item.thumbnail || item.imageUrls?.[0] || '';
 
+                    for (const d of matchedDevices) {
                         await NotificationModels.create({
                             deviceId: d.deviceId,
                             title: 'New Item Near You',
                             message: `${item.name} is available near you`,
+                            type: 'New_Item_Alert',
+                            img,
                             data: { itemId: item._id }
                         });
                     }
@@ -300,10 +306,10 @@ class TrashNothingSyncService {
 
         } catch (error: any) {
             console.error('[CRON] Sync failed:', error.message);
+        } finally {
+            this.isRunning = false;
         }
     }
-
-
 
     start() {
         cron.schedule('* * * * *', async () => {

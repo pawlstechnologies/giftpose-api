@@ -48,7 +48,8 @@ const subscriptionSchema = new Schema<Subscription>(
         "canceled",
         "past_due",
         "incomplete",
-        "incomplete_expired"
+        "incomplete_expired",
+        "unpaid",
       ],
       default: "inactive",
     },
