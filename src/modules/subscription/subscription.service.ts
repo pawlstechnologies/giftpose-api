@@ -210,39 +210,20 @@ export class SubscriptionService {
                 : Promise.resolve([]),
         ]);
 
-        // const debug = {
-        //     lookup: {
-        //         deviceId: deviceId ?? null,
-        //         userId: requesterUserId ?? null,
-        //         newPlan,
-        //     },
-        //     subscriptionsByDeviceId: byDeviceId,
-        //     subscriptionsByUserId: byUserId,
-        // };
-
-        // console.log("CHANGE PLAN SERVICE DEBUG:", JSON.stringify(debug, null, 2));
+       
 
         const active = await SubscriptionModel.findOne({
             status: "active",
             ...(conditions.length > 1 ? { $or: conditions } : conditions[0]),
         }).sort({ createdAt: -1 });
 
-        // console.log("CHANGE PLAN MATCHED ACTIVE:", active
-        //     ? {
-        //         _id: active._id,
-        //         deviceId: active.deviceId,
-        //         userId: active.userId,
-        //         status: active.status,
-        //         plan: active.plan,
-        //         stripeSubscriptionId: active.stripeSubscriptionId,
-        //     }
-        //     : null);
+      
 
         if (!active) {
             throw new ApiError(
                 400,
                 "No active subscription in database to change",
-                // debug
+               
             );
         }
 
@@ -268,7 +249,6 @@ export class SubscriptionService {
                 400,
                 "Subscription exists in database but was not found on Stripe",
                 {
-                    ...debug,
                     stripeSubscriptionId: active.stripeSubscriptionId,
                     stripeError: err?.message,
                 }
@@ -299,7 +279,6 @@ export class SubscriptionService {
                 400,
                 `Subscription is "${stripeSubscription.status}" on Stripe, not active. Database was out of sync.`,
                 {
-                    ...debug,
                     matchedActiveSubscription: {
                         _id: active._id,
                         status: active.status,
@@ -353,7 +332,7 @@ export class SubscriptionService {
                         currency: price.currency,
                         message: `Pay now for ${newPlan}. Your ${active.plan} plan stays active until ${currentPlanEndsAt.toISOString()}. ${newPlan} starts on ${newPlanStartsAt.toISOString()}.`,
                         debug: {
-                            ...debug,
+                        
                             matchedActiveSubscription: active.toObject(),
                         },
                     };
@@ -408,7 +387,6 @@ export class SubscriptionService {
             currency: price.currency,
             message: `Pay now for ${newPlan}. Your ${active.plan} plan stays active until ${currentPlanEndsAt.toISOString()}. ${newPlan} starts on ${newPlanStartsAt.toISOString()}.`,
             debug: {
-                ...debug,
                 matchedActiveSubscription: active.toObject(),
             },
         };
