@@ -178,6 +178,242 @@ export class SubscriptionService {
         };
     }
 
+    async changePlan(
+        deviceId: string,
+        newPlan: PlanType,
+        requesterUserId?: string
+    ) {
+        if (!deviceId?.trim() && !requesterUserId?.trim()) {
+            throw new ApiError(400, "Device ID or user is required");
+        }
+
+        if (!ALLOWED_PLANS.includes(newPlan)) {
+            throw new ApiError(400, "plan must be monthly or annual");
+        }
+
+        const conditions: Record<string, string>[] = [];
+
+        if (deviceId?.trim()) {
+            conditions.push({ deviceId });
+        }
+
+        if (requesterUserId?.trim()) {
+            conditions.push({ userId: requesterUserId });
+        }
+
+        const [byDeviceId, byUserId] = await Promise.all([
+            deviceId?.trim()
+                ? SubscriptionModel.find({ deviceId }).sort({ createdAt: -1 }).lean()
+                : Promise.resolve([]),
+            requesterUserId?.trim()
+                ? SubscriptionModel.find({ userId: requesterUserId }).sort({ createdAt: -1 }).lean()
+                : Promise.resolve([]),
+        ]);
+
+        // const debug = {
+        //     lookup: {
+        //         deviceId: deviceId ?? null,
+        //         userId: requesterUserId ?? null,
+        //         newPlan,
+        //     },
+        //     subscriptionsByDeviceId: byDeviceId,
+        //     subscriptionsByUserId: byUserId,
+        // };
+
+        // console.log("CHANGE PLAN SERVICE DEBUG:", JSON.stringify(debug, null, 2));
+
+        const active = await SubscriptionModel.findOne({
+            status: "active",
+            ...(conditions.length > 1 ? { $or: conditions } : conditions[0]),
+        }).sort({ createdAt: -1 });
+
+        // console.log("CHANGE PLAN MATCHED ACTIVE:", active
+        //     ? {
+        //         _id: active._id,
+        //         deviceId: active.deviceId,
+        //         userId: active.userId,
+        //         status: active.status,
+        //         plan: active.plan,
+        //         stripeSubscriptionId: active.stripeSubscriptionId,
+        //     }
+        //     : null);
+
+        if (!active) {
+            throw new ApiError(
+                400,
+                "No active subscription in database to change",
+                // debug
+            );
+        }
+
+        if (
+            requesterUserId &&
+            active.userId &&
+            active.userId !== requesterUserId
+        ) {
+            throw new ApiError(403, "Not allowed to change this subscription");
+        }
+
+        if (active.plan === newPlan) {
+            throw new ApiError(400, `Already on the ${newPlan} plan`);
+        }
+
+        let stripeSubscription: any;
+        try {
+            stripeSubscription = await stripe.subscriptions.retrieve(
+                active.stripeSubscriptionId
+            );
+        } catch (err: any) {
+            throw new ApiError(
+                400,
+                "Subscription exists in database but was not found on Stripe",
+                {
+                    ...debug,
+                    stripeSubscriptionId: active.stripeSubscriptionId,
+                    stripeError: err?.message,
+                }
+            );
+        }
+
+        console.log("CHANGE PLAN STRIPE STATUS:", {
+            stripeSubscriptionId: stripeSubscription.id,
+            stripeStatus: stripeSubscription.status,
+            dbStatus: active.status,
+            currentPeriodEnd: stripeSubscription.current_period_end
+                ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+                : null,
+        });
+
+        // Keep DB in sync with Stripe
+        if (active.status !== stripeSubscription.status) {
+            active.status = ["active", "inactive", "canceled", "past_due", "incomplete", "incomplete_expired", "unpaid"].includes(
+                stripeSubscription.status
+            )
+                ? stripeSubscription.status
+                : active.status;
+            await active.save();
+        }
+
+        if (stripeSubscription.status !== "active") {
+            throw new ApiError(
+                400,
+                `Subscription is "${stripeSubscription.status}" on Stripe, not active. Database was out of sync.`,
+                {
+                    ...debug,
+                    matchedActiveSubscription: {
+                        _id: active._id,
+                        status: active.status,
+                        plan: active.plan,
+                        stripeSubscriptionId: active.stripeSubscriptionId,
+                    },
+                    stripeStatus: stripeSubscription.status,
+                }
+            );
+        }
+
+        const periodEndUnix = stripeSubscription.current_period_end as number;
+        const currentPlanEndsAt = new Date(periodEndUnix * 1000);
+        // New plan starts at the end of the current period (e.g. monthly ends 2 Sept → annual from that boundary / 3 Sept).
+        const newPlanStartsAt = currentPlanEndsAt;
+
+        active.currentPeriodEnd = currentPlanEndsAt;
+        await active.save();
+
+        const newPriceId = getPriceId(newPlan);
+        const price = await stripe.prices.retrieve(newPriceId);
+
+        if (!price.unit_amount || !price.currency) {
+            throw new ApiError(500, "Stripe price amount is not configured");
+        }
+
+        const reusableStatuses = [
+            "requires_payment_method",
+            "requires_confirmation",
+            "requires_action",
+        ];
+
+        if (
+            active.pendingPlanChange?.status === "pending_payment" &&
+            active.pendingPlanChange.plan === newPlan &&
+            active.pendingPlanChange.paymentIntentId
+        ) {
+            try {
+                const existingIntent = await stripe.paymentIntents.retrieve(
+                    active.pendingPlanChange.paymentIntentId
+                );
+
+                if (reusableStatuses.includes(existingIntent.status)) {
+                    return {
+                        clientSecret: existingIntent.client_secret,
+                        currentPlan: active.plan,
+                        newPlan,
+                        currentPlanEndsAt,
+                        newPlanStartsAt,
+                        amount: price.unit_amount,
+                        currency: price.currency,
+                        message: `Pay now for ${newPlan}. Your ${active.plan} plan stays active until ${currentPlanEndsAt.toISOString()}. ${newPlan} starts on ${newPlanStartsAt.toISOString()}.`,
+                        debug: {
+                            ...debug,
+                            matchedActiveSubscription: active.toObject(),
+                        },
+                    };
+                }
+            } catch {
+                // Create a fresh payment intent below.
+            }
+        }
+
+        if (active.pendingPlanChange?.status === "scheduled") {
+            throw new ApiError(
+                400,
+                `A switch to ${active.pendingPlanChange.plan} is already scheduled for ${active.pendingPlanChange.startsAt.toISOString()}`
+            );
+        }
+
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount: price.unit_amount,
+            currency: price.currency,
+            customer: active.stripeCustomerId,
+            metadata: {
+                type: "PLAN_CHANGE",
+                deviceId,
+                userId: active.userId || "",
+                newPlan,
+                currentSubscriptionId: active.stripeSubscriptionId,
+                startsAt: String(periodEndUnix),
+                newPriceId,
+            },
+            automatic_payment_methods: {
+                enabled: true,
+            },
+            setup_future_usage: "off_session",
+        });
+
+        active.pendingPlanChange = {
+            plan: newPlan,
+            stripePriceId: newPriceId,
+            paymentIntentId: paymentIntent.id,
+            startsAt: newPlanStartsAt,
+            status: "pending_payment",
+        };
+        await active.save();
+
+        return {
+            clientSecret: paymentIntent.client_secret,
+            currentPlan: active.plan,
+            newPlan,
+            currentPlanEndsAt,
+            newPlanStartsAt,
+            amount: price.unit_amount,
+            currency: price.currency,
+            message: `Pay now for ${newPlan}. Your ${active.plan} plan stays active until ${currentPlanEndsAt.toISOString()}. ${newPlan} starts on ${newPlanStartsAt.toISOString()}.`,
+            debug: {
+                ...debug,
+                matchedActiveSubscription: active.toObject(),
+            },
+        };
+    }
+
     async cancelSubscription(
         subscriptionId: string,
         cancelImmediately = false,

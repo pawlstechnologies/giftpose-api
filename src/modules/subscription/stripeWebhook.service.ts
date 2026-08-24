@@ -1,6 +1,8 @@
 import { SubscriptionModel } from "./subscription.model";
 import { PaymentModel } from "../payment/payment.model";
 import LocationModel from "../location/location.model";
+import { stripe } from "../../config/stripe";
+import { PlanType } from "./subscription.types";
 
 const getSubscriptionIdFromInvoice = (invoice: any): string | undefined => {
     const raw =
@@ -39,11 +41,141 @@ const setLocationFromSubscription = async (
     );
 };
 
+const activateScheduledPlanChange = async (stripeSubscription: any) => {
+    if (stripeSubscription.metadata?.type !== "PLAN_CHANGE_SCHEDULED") {
+        return false;
+    }
+
+    const deviceId = stripeSubscription.metadata.deviceId;
+    const newPlan = stripeSubscription.metadata.plan as PlanType;
+    const replacesSubscriptionId = stripeSubscription.metadata.replacesSubscriptionId;
+
+    let record = replacesSubscriptionId
+        ? await SubscriptionModel.findOne({
+            deviceId,
+            stripeSubscriptionId: replacesSubscriptionId,
+        })
+        : null;
+
+    if (!record) {
+        record = await SubscriptionModel.findOne({
+            "pendingPlanChange.pendingStripeSubscriptionId": stripeSubscription.id,
+        });
+    }
+
+    if (!record) return false;
+
+    record.plan = newPlan;
+    record.stripeSubscriptionId = stripeSubscription.id;
+    record.stripePriceId =
+        stripeSubscription.items?.data?.[0]?.price?.id || record.stripePriceId;
+    record.status = "active";
+    record.cancelAtPeriodEnd = false;
+    record.currentPeriodEnd = stripeSubscription.current_period_end
+        ? new Date(stripeSubscription.current_period_end * 1000)
+        : undefined;
+    record.pendingPlanChange = undefined;
+    await record.save();
+    await setLocationFromSubscription(record, true);
+    return true;
+};
+
+const applyPlanChangePayment = async (paymentIntent: any) => {
+    if (paymentIntent.metadata?.type !== "PLAN_CHANGE") {
+        return;
+    }
+
+    const deviceId = paymentIntent.metadata.deviceId as string;
+    const newPlan = paymentIntent.metadata.newPlan as PlanType;
+    const newPriceId = paymentIntent.metadata.newPriceId as string;
+    const currentSubscriptionId = paymentIntent.metadata.currentSubscriptionId as string;
+    const startsAtUnix = Number(paymentIntent.metadata.startsAt);
+
+    if (!deviceId || !newPlan || !newPriceId || !currentSubscriptionId || !startsAtUnix) {
+        console.error("PLAN_CHANGE payment missing metadata");
+        return;
+    }
+
+    const active = await SubscriptionModel.findOne({
+        deviceId,
+        stripeSubscriptionId: currentSubscriptionId,
+    });
+
+    if (!active) {
+        console.error("PLAN_CHANGE subscription not found", deviceId);
+        return;
+    }
+
+    if (active.pendingPlanChange?.status === "scheduled") {
+        return;
+    }
+
+    await stripe.subscriptions.update(currentSubscriptionId, {
+        cancel_at_period_end: true,
+    });
+
+    await stripe.customers.createBalanceTransaction(active.stripeCustomerId, {
+        amount: -paymentIntent.amount,
+        currency: paymentIntent.currency,
+        description: `Prepaid ${newPlan} plan change`,
+    });
+
+    const paymentMethodId =
+        typeof paymentIntent.payment_method === "string"
+            ? paymentIntent.payment_method
+            : paymentIntent.payment_method?.id;
+
+    if (paymentMethodId) {
+        await stripe.customers.update(active.stripeCustomerId, {
+            invoice_settings: {
+                default_payment_method: paymentMethodId,
+            },
+        });
+    }
+
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const trialEnd = Math.max(startsAtUnix, nowUnix + 60);
+
+    const newSubscription: any = await stripe.subscriptions.create({
+        customer: active.stripeCustomerId,
+        items: [{ price: newPriceId }],
+        trial_end: trialEnd,
+        ...(paymentMethodId ? { default_payment_method: paymentMethodId } : {}),
+        metadata: {
+            deviceId,
+            userId: active.userId || "",
+            plan: newPlan,
+            type: "PLAN_CHANGE_SCHEDULED",
+            replacesSubscriptionId: currentSubscriptionId,
+        },
+    });
+
+    active.cancelAtPeriodEnd = true;
+    active.pendingPlanChange = {
+        plan: newPlan,
+        stripePriceId: newPriceId,
+        paymentIntentId: paymentIntent.id,
+        startsAt: new Date(trialEnd * 1000),
+        status: "scheduled",
+        pendingStripeSubscriptionId: newSubscription.id,
+    };
+    await active.save();
+};
+
 const applyInvoicePaid = async (invoice: any) => {
     const subscriptionId = getSubscriptionIdFromInvoice(invoice);
     if (!subscriptionId) {
         console.error("Invoice paid but no subscription id found");
         return;
+    }
+
+    try {
+        const stripeSubscription: any = await stripe.subscriptions.retrieve(subscriptionId);
+        if (await activateScheduledPlanChange(stripeSubscription)) {
+            return;
+        }
+    } catch (err) {
+        console.error("Failed to activate scheduled plan change:", err);
     }
 
     const periodEnd = getPeriodEndFromInvoice(invoice);
@@ -71,6 +203,29 @@ const applyInvoicePaymentFailed = async (invoice: any) => {
 };
 
 const applySubscriptionDeleted = async (stripeSubscription: any) => {
+    if (stripeSubscription.metadata?.type === "PLAN_CHANGE_SCHEDULED") {
+        return;
+    }
+
+    const pendingReplacement = await SubscriptionModel.findOne({
+        stripeSubscriptionId: stripeSubscription.id,
+        "pendingPlanChange.status": "scheduled",
+    });
+
+    if (pendingReplacement?.pendingPlanChange?.pendingStripeSubscriptionId) {
+        try {
+            const nextSub: any = await stripe.subscriptions.retrieve(
+                pendingReplacement.pendingPlanChange.pendingStripeSubscriptionId
+            );
+            if (nextSub.status === "active" || nextSub.status === "trialing") {
+                await activateScheduledPlanChange(nextSub);
+                return;
+            }
+        } catch {
+            // Fall through to normal cancel handling.
+        }
+    }
+
     const updatedSubscription = await SubscriptionModel.findOneAndUpdate(
         { stripeSubscriptionId: stripeSubscription.id },
         {
@@ -84,6 +239,12 @@ const applySubscriptionDeleted = async (stripeSubscription: any) => {
 };
 
 const applySubscriptionUpdated = async (stripeSubscription: any) => {
+    if (stripeSubscription.status === "active") {
+        if (await activateScheduledPlanChange(stripeSubscription)) {
+            return;
+        }
+    }
+
     const status = stripeSubscription.status === "cancelled"
         ? "canceled"
         : stripeSubscription.status;
@@ -111,12 +272,18 @@ const applySubscriptionUpdated = async (stripeSubscription: any) => {
 };
 
 const applyPaymentIntentSucceeded = async (paymentIntent: any) => {
-    const payment = await PaymentModel.findOneAndUpdate(
+    await PaymentModel.findOneAndUpdate(
         { paymentIntentId: paymentIntent.id },
         { status: "success" },
         { new: true }
     );
 
+    if (paymentIntent.metadata?.type === "PLAN_CHANGE") {
+        await applyPlanChangePayment(paymentIntent);
+        return;
+    }
+
+    const payment = await PaymentModel.findOne({ paymentIntentId: paymentIntent.id });
     const deviceId =
         payment?.deviceId ||
         paymentIntent.metadata?.deviceId;
@@ -138,6 +305,13 @@ const applyPaymentIntentFailed = async (paymentIntent: any) => {
         { paymentIntentId: paymentIntent.id },
         { status: "failed" }
     );
+
+    if (paymentIntent.metadata?.type === "PLAN_CHANGE") {
+        await SubscriptionModel.findOneAndUpdate(
+            { "pendingPlanChange.paymentIntentId": paymentIntent.id },
+            { $unset: { pendingPlanChange: 1 } }
+        );
+    }
 };
 
 export const handleStripeEvent = async (event: { type: string; data: { object: any } }) => {

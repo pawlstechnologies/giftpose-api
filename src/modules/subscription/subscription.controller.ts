@@ -8,6 +8,7 @@ const sendError = (res: Response, error: any) => {
     return res.status(statusCode).json({
         success: false,
         message: error?.message || "Request failed",
+        ...(error?.errors ? { debug: error.errors } : {}),
     });
 };
 
@@ -119,6 +120,41 @@ export const updateStatus = async (req: AuthRequest<any, any, any>, res: Respons
         });
     } catch (error: any) {
         console.error("UPDATE SUBSCRIPTION STATUS ERROR:", error);
+        return sendError(res, error);
+    }
+};
+
+export const changePlan = async (req: AuthRequest<any, any, any>, res: Response) => {
+    try {
+        const deviceId = req.user?.deviceId || req.body.deviceId;
+        const userId = req.user?._id?.toString();
+        const { plan } = req.body;
+
+        
+
+        if (!plan) {
+            throw new ApiError(400, "plan is required");
+        }
+
+        const data = await subscriptionService.changePlan(
+            deviceId,
+            plan,
+            userId
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: data.message,
+            data,
+        });
+    } catch (error: any) {
+        console.error("CHANGE PLAN ERROR:", {
+            message: error?.message,
+            deviceIdFromUser: req.user?.deviceId ?? null,
+            deviceIdFromBody: req.body?.deviceId ?? null,
+            userId: req.user?._id?.toString() ?? null,
+            email: req.user?.email ?? null,
+        });
         return sendError(res, error);
     }
 };

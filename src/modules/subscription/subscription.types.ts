@@ -11,6 +11,17 @@ export type SubscriptionStatus =
   | "incomplete_expired"
   | "unpaid";
 
+export type PendingPlanChangeStatus = "pending_payment" | "scheduled";
+
+export interface PendingPlanChange {
+  plan: PlanType;
+  stripePriceId: string;
+  paymentIntentId: string;
+  startsAt: Date;
+  status: PendingPlanChangeStatus;
+  pendingStripeSubscriptionId?: string;
+}
+
 export interface Subscription {
   deviceId: string;
   userId?: string;
@@ -21,6 +32,7 @@ export interface Subscription {
   status: SubscriptionStatus;
   currentPeriodEnd?: Date;
   cancelAtPeriodEnd: boolean;
+  pendingPlanChange?: PendingPlanChange;
 }
 
 export type HydratedSubscription = HydratedDocument<Subscription>;

@@ -62,6 +62,21 @@ const subscriptionSchema = new Schema<Subscription>(
       type: Boolean,
       default: false,
     },
+
+    pendingPlanChange: {
+      plan: {
+        type: String,
+        enum: ["monthly", "annual"],
+      },
+      stripePriceId: String,
+      paymentIntentId: String,
+      startsAt: Date,
+      status: {
+        type: String,
+        enum: ["pending_payment", "scheduled"],
+      },
+      pendingStripeSubscriptionId: String,
+    },
   },
   { timestamps: true }
 );
