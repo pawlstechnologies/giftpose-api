@@ -37,7 +37,7 @@ app.use(
 
 // Stripe needs the unmodified request body for signature verification.
 app.use(
-  "/api/stripe-webhook",
+  "/webhook",
   express.raw({ type: "application/json" }),
   subscriptionWebhook
 );
