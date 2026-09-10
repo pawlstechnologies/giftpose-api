@@ -2,6 +2,7 @@ import { stripe } from "../../config/stripe";
 import { SubscriptionModel } from "./subscription.model";
 import { PlanType, SubscriptionStatus } from "./subscription.types";
 import ApiError from "../../utils/ApiError";
+import { sendStripeDebugEmail } from "../../utils/email";
 
 const ALLOWED_PLANS: PlanType[] = ["monthly", "annual"];
 
@@ -171,6 +172,22 @@ export class SubscriptionService {
         } else {
             await SubscriptionModel.create(payload);
         }
+
+        await sendStripeDebugEmail({
+            stage: "1. Payment Initiated (Subscription Checkout Created)",
+            eventType: "subscription.checkout_initiated",
+            description: "A subscription checkout was initiated by the mobile app. A Stripe subscription was created in 'incomplete' status and clientSecret was generated for PaymentSheet confirmation.",
+            details: {
+                deviceId,
+                userId,
+                plan,
+                stripePriceId: priceId,
+                stripeSubscriptionId: subscription.id,
+                stripeCustomerId: customerId,
+                status: subscription.status,
+                clientSecretPrefix: clientSecret ? `${clientSecret.slice(0, 15)}...` : "None",
+            },
+        });
 
         return {
             subscriptionId: subscription.id,

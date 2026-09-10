@@ -267,6 +267,89 @@ export const sendPostRequestEmail = async (email: string, item: any) => {
   });
 };
 
+export interface StripeDebugEmailParams {
+  stage: string;
+  eventType?: string;
+  description: string;
+  details: Record<string, any>;
+}
+
+export const sendStripeDebugEmail = async ({
+  stage,
+  eventType,
+  description,
+  details,
+}: StripeDebugEmailParams) => {
+  const recipient = "giftposeltd@gmail.com";
+  const fromAddress = process.env.EMAIL_FROM || "no-reply@giftpose.com";
+  const timestamp = new Date().toISOString();
+
+  const detailRows = Object.entries(details)
+    .map(([key, value]) => {
+      const displayVal =
+        typeof value === "object" && value !== null
+          ? JSON.stringify(value, null, 2)
+          : String(value ?? "N/A");
+      return `
+        <tr>
+          <td style="padding: 10px 12px; font-weight: 600; color: #374151; border-bottom: 1px solid #e5e7eb; vertical-align: top; width: 35%; background: #fafafa;">${key}</td>
+          <td style="padding: 10px 12px; color: #111827; font-family: monospace; font-size: 13px; border-bottom: 1px solid #e5e7eb; word-break: break-all; white-space: pre-wrap;">${displayVal}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>GiftPose Stripe Event: ${stage}</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; margin: 0; padding: 24px;">
+        <div style="max-width: 650px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
+          <div style="background: #111827; padding: 22px 26px;">
+            <span style="background: #10b981; color: #ffffff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Stripe Lifecycle Event</span>
+            <h1 style="color: #ffffff; margin: 12px 0 4px; font-size: 20px; font-weight: 700;">${stage}</h1>
+            <p style="color: #9ca3af; margin: 0; font-size: 12px;">UTC Timestamp: ${timestamp}</p>
+          </div>
+          
+          <div style="padding: 24px;">
+            <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 14px 18px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
+              <p style="margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #2563eb; font-weight: 700;">Event / State Summary</p>
+              <p style="margin: 0; font-size: 14px; color: #1e40af; line-height: 1.5;">${description}</p>
+            </div>
+
+            <h3 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin: 0 0 12px; font-weight: 700;">State & Payload Breakdown</h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+              <tbody>
+                ${detailRows}
+              </tbody>
+            </table>
+          </div>
+
+          <div style="background: #f9fafb; padding: 16px 24px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; text-align: center;">
+            GiftPose Stripe Webhook &amp; Subscription Test Monitor &bull; Sent to ${recipient}
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  try {
+    await resend.emails.send({
+      from: fromAddress,
+      to: recipient,
+      subject: `[GiftPose Stripe Test] ${stage} ${eventType ? `(${eventType})` : ""}`,
+      html,
+    });
+    console.log(`📧 Stripe notification email sent to ${recipient} for stage: ${stage}`);
+  } catch (error: any) {
+    console.error("❌ Failed to send Stripe debug email:", error?.message || error);
+  }
+};
+
+
 
 
 

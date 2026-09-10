@@ -3,6 +3,7 @@ import { PaymentModel } from "../payment/payment.model";
 import LocationModel from "../location/location.model";
 import { stripe } from "../../config/stripe";
 import { PlanType } from "./subscription.types";
+import { sendStripeDebugEmail } from "../../utils/email";
 
 const getSubscriptionIdFromInvoice = (invoice: any): string | undefined => {
     const raw =
@@ -189,17 +190,51 @@ const applyInvoicePaid = async (invoice: any) => {
     );
 
     await setLocationFromSubscription(updatedSubscription, true);
+
+    await sendStripeDebugEmail({
+        stage: "2. Invoice Paid & Account Upgraded (Premium Activated)",
+        eventType: "invoice.paid / invoice.payment_succeeded",
+        description: "Payment succeeded on Stripe! The subscription status has been set to 'active' in MongoDB, and the user's location has been upgraded: isPremium=true, adEnabled=false.",
+        details: {
+            invoiceId: invoice.id,
+            stripeSubscriptionId: subscriptionId,
+            amountPaid: invoice.amount_paid ? `${invoice.amount_paid / 100} ${invoice.currency?.toUpperCase()}` : "0",
+            customerEmail: invoice.customer_email || "N/A",
+            stripeCustomerId: invoice.customer,
+            deviceId: updatedSubscription?.deviceId || "N/A",
+            plan: updatedSubscription?.plan || "N/A",
+            subscriptionStatus: updatedSubscription?.status || "active",
+            isPremium: true,
+            adEnabled: false,
+            currentPeriodEnd: updatedSubscription?.currentPeriodEnd ? updatedSubscription.currentPeriodEnd.toISOString() : "N/A",
+        },
+    });
 };
 
 const applyInvoicePaymentFailed = async (invoice: any) => {
     const subscriptionId = getSubscriptionIdFromInvoice(invoice);
     if (!subscriptionId) return;
 
-    await SubscriptionModel.findOneAndUpdate(
+    const updated = await SubscriptionModel.findOneAndUpdate(
         { stripeSubscriptionId: subscriptionId },
         { status: "past_due" },
         { new: true }
     );
+
+    await sendStripeDebugEmail({
+        stage: "Invoice Payment Failed (Subscription Past Due)",
+        eventType: "invoice.payment_failed",
+        description: "Payment for invoice failed on Stripe. The subscription status has been marked 'past_due' in MongoDB.",
+        details: {
+            invoiceId: invoice.id,
+            stripeSubscriptionId: subscriptionId,
+            amountAttempted: invoice.amount_due ? `${invoice.amount_due / 100} ${invoice.currency?.toUpperCase()}` : "0",
+            customerEmail: invoice.customer_email || "N/A",
+            deviceId: updated?.deviceId || "N/A",
+            attemptCount: invoice.attempt_count,
+            nextPaymentAttempt: invoice.next_payment_attempt ? new Date(invoice.next_payment_attempt * 1000).toISOString() : "None",
+        },
+    });
 };
 
 const applySubscriptionDeleted = async (stripeSubscription: any) => {
@@ -236,6 +271,19 @@ const applySubscriptionDeleted = async (stripeSubscription: any) => {
     );
 
     await setLocationFromSubscription(updatedSubscription, false);
+
+    await sendStripeDebugEmail({
+        stage: "Subscription Canceled / Ended (Account Downgraded)",
+        eventType: "customer.subscription.deleted",
+        description: "Subscription has ended or was canceled on Stripe. The subscription status has been marked 'canceled' in MongoDB and the device location was downgraded: isPremium=false, adEnabled=true.",
+        details: {
+            stripeSubscriptionId: stripeSubscription.id,
+            deviceId: updatedSubscription?.deviceId || "N/A",
+            status: "canceled",
+            isPremium: false,
+            adEnabled: true,
+        },
+    });
 };
 
 const applySubscriptionUpdated = async (stripeSubscription: any) => {
@@ -263,12 +311,23 @@ const applySubscriptionUpdated = async (stripeSubscription: any) => {
 
     if (status === "active") {
         await setLocationFromSubscription(updatedSubscription, true);
-        return;
-    }
-
-    if (status === "canceled" || status === "unpaid" || status === "incomplete_expired") {
+    } else if (status === "canceled" || status === "unpaid" || status === "incomplete_expired") {
         await setLocationFromSubscription(updatedSubscription, false);
     }
+
+    await sendStripeDebugEmail({
+        stage: `Subscription State Updated: ${status.toUpperCase()}`,
+        eventType: "customer.subscription.updated",
+        description: `Stripe sent a subscription update event. The subscription is now '${status}'. Device location premium status was synced accordingly.`,
+        details: {
+            stripeSubscriptionId: stripeSubscription.id,
+            status,
+            cancelAtPeriodEnd: Boolean(stripeSubscription.cancel_at_period_end),
+            currentPeriodEnd: stripeSubscription.current_period_end ? new Date(stripeSubscription.current_period_end * 1000).toISOString() : "N/A",
+            deviceId: updatedSubscription?.deviceId || "N/A",
+            isPremium: status === "active",
+        },
+    });
 };
 
 const applyPaymentIntentSucceeded = async (paymentIntent: any) => {
@@ -298,6 +357,19 @@ const applyPaymentIntentSucceeded = async (paymentIntent: any) => {
             { adEnabled: false }
         );
     }
+
+    await sendStripeDebugEmail({
+        stage: "Payment Intent Succeeded",
+        eventType: "payment_intent.succeeded",
+        description: "PaymentIntent succeeded on Stripe. Payment record marked as 'success' in MongoDB.",
+        details: {
+            paymentIntentId: paymentIntent.id,
+            amount: paymentIntent.amount ? `${paymentIntent.amount / 100} ${paymentIntent.currency?.toUpperCase()}` : "0",
+            paymentType: type || "General / Subscription",
+            deviceId: deviceId || "N/A",
+            customerId: paymentIntent.customer || "N/A",
+        },
+    });
 };
 
 const applyPaymentIntentFailed = async (paymentIntent: any) => {
@@ -312,6 +384,18 @@ const applyPaymentIntentFailed = async (paymentIntent: any) => {
             { $unset: { pendingPlanChange: 1 } }
         );
     }
+
+    await sendStripeDebugEmail({
+        stage: "Payment Intent Failed",
+        eventType: "payment_intent.payment_failed",
+        description: "PaymentIntent payment attempt failed or was declined by the bank.",
+        details: {
+            paymentIntentId: paymentIntent.id,
+            amount: paymentIntent.amount ? `${paymentIntent.amount / 100} ${paymentIntent.currency?.toUpperCase()}` : "0",
+            errorMessage: paymentIntent.last_payment_error?.message || "Declined / Failed",
+            customerId: paymentIntent.customer || "N/A",
+        },
+    });
 };
 
 export const handleStripeEvent = async (event: { type: string; data: { object: any } }) => {
@@ -342,6 +426,16 @@ export const handleStripeEvent = async (event: { type: string; data: { object: a
             break;
 
         default:
+            await sendStripeDebugEmail({
+                stage: `Stripe Webhook Event Received: ${event.type}`,
+                eventType: event.type,
+                description: `Received Stripe webhook event '${event.type}'. No specific state transition action was configured for this event.`,
+                details: {
+                    eventType: event.type,
+                    eventId: (event.data.object as any)?.id || "N/A",
+                    objectType: (event.data.object as any)?.object || "N/A",
+                },
+            });
             break;
     }
 };
