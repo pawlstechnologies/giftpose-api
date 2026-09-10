@@ -11,15 +11,11 @@ import { UserModel } from "../onboarding/auth.model";
 
 export class LocationService {
     async getLocationByPostcode(
-        firebaseToken: string,
+        firebaseToken: string | undefined | null,
         postCode: string,
         deviceId: string,
         miles: number
     ): Promise<LocationInterface> {
-
-        if (!firebaseToken?.trim()) {
-            throw new ApiError(400, 'Firebase Token is required');
-        }
 
         if (!postCode?.trim()) {
             throw new ApiError(400, 'Postcode is required');
@@ -61,7 +57,7 @@ export class LocationService {
         );
 
         const locationData = {
-            firebaseToken,
+            firebaseToken: firebaseToken?.trim() || null,
             deviceId,
             postCode,
             lng: location.lng,
@@ -82,6 +78,27 @@ export class LocationService {
         );
 
         return savedLocation.toObject();
+    }
+
+    async updateFcmToken(deviceId: string, firebaseToken: string): Promise<LocationInterface> {
+        if (!deviceId?.trim()) {
+            throw new ApiError(400, 'Device ID is required');
+        }
+        if (!firebaseToken?.trim()) {
+            throw new ApiError(400, 'Firebase Token is required');
+        }
+
+        const updated = await LocationModel.findOneAndUpdate(
+            { deviceId: deviceId.trim() },
+            { $set: { firebaseToken: firebaseToken.trim() } },
+            { new: true }
+        );
+
+        if (!updated) {
+            throw new ApiError(404, 'Device location not found. Please register location first.');
+        }
+
+        return updated.toObject();
     }
 
     async getDevicesNearItem(lng: number, lat: number) {

@@ -1,5 +1,5 @@
 export interface LocationInterface {
-    firebaseToken: string;
+    firebaseToken?: string | null;
     deviceId: string;
     postCode: string;
     subscriptionId?: string;

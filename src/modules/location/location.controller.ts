@@ -43,6 +43,31 @@ export const fetchPostcodeLocation = async (req: Request, res: Response) => {
   }
 };
 
+export const updateFcmToken = async (req: Request, res: Response) => {
+  const { deviceId, firebaseToken } = req.body;
+
+  if (!deviceId?.trim()) {
+    return res.status(400).json({ message: 'Device ID is required' });
+  }
+
+  if (!firebaseToken?.trim()) {
+    return res.status(400).json({ message: 'Firebase Token is required' });
+  }
+
+  try {
+    const updated = await locationService.updateFcmToken(deviceId, firebaseToken);
+    res.status(200).json({
+      status: true,
+      message: 'FCM token updated successfully',
+      data: updated
+    });
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({
+      message: error.message || 'Internal server error'
+    });
+  }
+};
+
 
 export const getDistance = async (req: Request, res: Response) => {
   const { from, to } = req.body;

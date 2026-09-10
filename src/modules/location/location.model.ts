@@ -5,7 +5,7 @@ export type LocationModel = HydratedDocument<LocationInterface>;
 
 const locationSchema = new Schema<LocationModel>(
     {
-        firebaseToken: { type: String, required: true, unique: true },
+        firebaseToken: { type: String, required: false, default: null },
         deviceId: { type: String, required: true, unique: true, trim: true },
         postCode: { type: String, required: true, trim: true },
         adEnabled: { type: Boolean, default: true }, // ads are enabled by default
