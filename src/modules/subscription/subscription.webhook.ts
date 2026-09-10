@@ -7,7 +7,11 @@ const router = express.Router();
 
 router.post("/", async (req, res) => {
     const signature = req.headers["stripe-signature"];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    const rawSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    const webhookSecret = rawSecret ? rawSecret.trim().replace(/^["']|["']$/g, "") : undefined;
+
+    const bodyIsBuffer = Buffer.isBuffer(req.body);
+    const bodyLength = req.body ? (bodyIsBuffer ? req.body.length : JSON.stringify(req.body).length) : 0;
 
     if (!signature || !webhookSecret || webhookSecret.includes("XXXX")) {
         await sendStripeDebugEmail({
@@ -34,11 +38,14 @@ router.post("/", async (req, res) => {
         console.error("Stripe webhook signature failed:", (err as Error).message);
         await sendStripeDebugEmail({
             stage: "Webhook Error: Signature Verification Failed",
-            description: "Stripe signature verification failed using stripe.webhooks.constructEvent. This happens when the signing secret in .env does not match the Stripe endpoint (e.g. Test vs Live secret mismatch).",
+            description: "Stripe signature verification failed using stripe.webhooks.constructEvent. This happens when the signing secret in .env does not match the Stripe endpoint (e.g. Test vs Live secret mismatch) or the request body was modified.",
             details: {
                 errorMessage: (err as Error).message,
                 signaturePrefix: typeof signature === "string" ? `${signature.slice(0, 25)}...` : "Invalid",
                 webhookSecretPrefix: `${webhookSecret.slice(0, 10)}...`,
+                bodyType: typeof req.body,
+                bodyIsBuffer,
+                bodyLengthBytes: bodyLength,
             },
         });
         return res.status(400).send("Webhook Error");
