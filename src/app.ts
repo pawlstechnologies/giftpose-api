@@ -13,6 +13,7 @@ import authRoutes from './modules/onboarding/auth.routes';
 import paymentRoutes from './modules/payment/payment.routes';
 import userRoutes from './modules/user/user.routes';
 import adminAuthRoutes from './admin/auth/admin.routes';
+import adminUserRoutes from './admin/user/user.routes';
 import subscriptionRoutes from './modules/subscription/subscription.routes'
 import subscriptionWebhook from './modules/subscription/subscription.webhook';
 import activityLog from './admin/activityLog/activity.routes';
@@ -66,6 +67,7 @@ app.use("/api/user", userRoutes);
 ////admin routes
 app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/admin/activity", activityLog);
+app.use("/api/admin/users", adminUserRoutes);
 
 app.use(errorHandler); //handles error globally
 

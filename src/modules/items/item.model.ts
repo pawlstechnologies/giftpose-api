@@ -21,7 +21,7 @@ const itemSchema = new Schema<ItemModel>(
       type: Schema.Types.ObjectId, ref: "Category", required: true
     },
     subCategoryId: {
-      type: Schema.Types.ObjectId, ref: "Subcategory", required: true
+      type: Schema.Types.ObjectId, ref: "SubCategory", required: true
       // type: String 
     },
     contentId: {
