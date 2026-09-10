@@ -112,7 +112,7 @@ export class AdminAuthService {
 
 
 
-    static generateTokens(admin: any) {
+    static async generateTokens(admin: any) {
         const accessToken = jwt.sign(
             { id: admin._id, role: admin.role },
             process.env.ADMIN_JWT_SECRET!,
@@ -127,7 +127,7 @@ export class AdminAuthService {
 
         admin.refreshToken = refreshToken;
         admin.lastLogin = new Date();
-        admin.save();
+        await admin.save();
 
         return {
             accessToken,
@@ -138,11 +138,54 @@ export class AdminAuthService {
                 role: admin.role
             }
         };
+    }
 
-        // return {
-        //     accessToken,
-        //     refreshToken
-        // };
+    static async resendOTP(adminId: string) {
+        const admin = await AdminModel.findById(adminId);
+        if (!admin) throw new Error('Admin not found');
+
+        if (admin.lockUntil && admin.lockUntil > new Date()) {
+            throw new Error('Account locked');
+        }
+
+        const otp = crypto.randomInt(100000, 999999).toString();
+        admin.otpCode = otp;
+        admin.otpExpires = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
+        admin.otpAttempts = 0;
+        await admin.save();
+
+        sendVerificationEmail(admin.email, otp);
+
+        return {
+            message: 'OTP resent successfully',
+            adminId: admin._id
+        };
+    }
+
+    static async refreshAccessToken(refreshToken: string) {
+        if (!refreshToken) {
+            throw new Error('Refresh token is required');
+        }
+
+        let decoded: any;
+        try {
+            decoded = jwt.verify(refreshToken, process.env.ADMIN_REFRESH_SECRET!);
+        } catch {
+            throw new Error('Invalid or expired refresh token');
+        }
+
+        const admin = await AdminModel.findById(decoded.id);
+        if (!admin || !admin.isActive) {
+            throw new Error('Admin not found or inactive');
+        }
+
+        // Validate that stored refreshToken matches
+        if (admin.refreshToken !== refreshToken) {
+            throw new Error('Invalid refresh token session');
+        }
+
+        // Re-issue new token pair (refresh rotation)
+        return this.generateTokens(admin);
     }
 
     static async handleFailedLogin(admin: any) {
@@ -175,15 +218,14 @@ export class AdminAuthService {
         };
     }       
 
-    static async logout(adminId: string, refreshToken: string) {
+    static async logout(adminId: string, refreshToken?: string) {
         const admin = await AdminModel.findById(adminId);
 
         if (!admin) {
             throw new Error('Admin not found');
         }
 
-        // Ensure token matches
-        if (admin.refreshToken !== refreshToken) {
+        if (refreshToken && admin.refreshToken && admin.refreshToken !== refreshToken) {
             throw new Error('Invalid session');
         }
 

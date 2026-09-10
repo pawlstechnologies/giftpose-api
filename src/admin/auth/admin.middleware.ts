@@ -2,28 +2,46 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
 
-const WHITELISTED_IPS = [
+const DEFAULT_WHITELISTED_IPS = [
     '127.0.0.1',
     '::1',
-    '192.168.1.10', // office IP
-    'your-production-ip'
+    '::ffff:127.0.0.1',
+    '192.168.1.10',
 ];
 
 export interface AuthRequest extends Request {
     user?: any;
 }
 
-
 export const ipWhitelistMiddleware = (
     req: AuthRequest,
     res: Response,
     next: NextFunction
 ) => {
-    const ip =
-        req.headers['x-forwarded-for']?.toString().split(',')[0] ||
-        req.socket.remoteAddress;
+    // If IP whitelisting is explicitly disabled or not configured in production, allow pass-through
+    const configuredIps = process.env.ADMIN_IP_WHITELIST
+        ? process.env.ADMIN_IP_WHITELIST.split(',').map((ip) => ip.trim()).filter(Boolean)
+        : null;
 
-    if (!ip || !WHITELISTED_IPS.includes(ip)) {
+    if (process.env.NODE_ENV !== 'production' && !configuredIps) {
+        return next();
+    }
+
+    const allowedIps = configuredIps && configuredIps.length > 0 ? configuredIps : DEFAULT_WHITELISTED_IPS;
+
+    const rawIp =
+        req.headers['x-forwarded-for']?.toString().split(',')[0].trim() ||
+        req.socket.remoteAddress ||
+        '';
+
+    const normalizedIp = rawIp.replace(/^::ffff:/, '');
+
+    const isAllowed = allowedIps.some((allowed) => {
+        const cleanAllowed = allowed.replace(/^::ffff:/, '');
+        return cleanAllowed === normalizedIp || cleanAllowed === rawIp;
+    });
+
+    if (!isAllowed) {
         return res.status(403).json({
             message: 'Access denied from this IP'
         });

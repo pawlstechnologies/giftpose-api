@@ -76,6 +76,34 @@ export class AdminController {
         }
     };
 
+    static async resendOTP(req: Request, res: Response) {
+        try {
+            const { adminId } = req.body;
+            if (!adminId) {
+                return res.status(400).json({ message: 'Admin ID is required' });
+            }
+
+            const result = await AdminAuthService.resendOTP(adminId);
+            res.status(200).json(result);
+        } catch (err: any) {
+            res.status(400).json({ message: err.message || 'Failed to resend OTP' });
+        }
+    }
+
+    static async refreshToken(req: Request, res: Response) {
+        try {
+            const { refreshToken } = req.body;
+            if (!refreshToken) {
+                return res.status(400).json({ message: 'Refresh token is required' });
+            }
+
+            const result = await AdminAuthService.refreshAccessToken(refreshToken);
+            res.status(200).json(result);
+        } catch (err: any) {
+            res.status(401).json({ message: err.message || 'Failed to refresh token' });
+        }
+    }
+
 
     // static async verifyMFA(req: Request, res: Response) {
     //     try {

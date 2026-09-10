@@ -13,6 +13,8 @@ router.use(ipWhitelistMiddleware);
 // 🔐 AUTH ROUTES
 router.post('/login', AdminController.login);
 router.post('/verify-otp', AdminController.verifyOTP);
+router.post('/resend-otp', AdminController.resendOTP);
+router.post('/refresh', AdminController.refreshToken);
 router.post('/logout', adminAuthMiddleware(), AdminController.logout);
 
 // 🔐 PROTECTED ROUTE EXAMPLE
