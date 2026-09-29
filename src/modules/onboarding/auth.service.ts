@@ -202,11 +202,8 @@ export class AuthService {
 
         const code = generateVerificationCode();
 
-        user.resetPasswordCode = code;
-        user.resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000);
-
-        // user.verificationCode = code;
-        // user.verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
+        user.verificationCode = code;
+        user.verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
 
         await user.save();
 
@@ -225,8 +222,11 @@ export class AuthService {
 
     async verifyEmail(data: VerifyEmailDTO) {
         const { email, code } = data;
+        const cleanEmail = email?.trim().toLowerCase();
 
-        const user = await UserModel.findOne({ email });
+        const user = await UserModel.findOne({
+            email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') }
+        });
 
         if (!user) {
             return {
@@ -238,7 +238,7 @@ export class AuthService {
 
         //throw new ApiError(404, 'User not found');
 
-        if (user.verificationCode !== code) {
+        if (user.verificationCode !== code?.trim()) {
             return {
                 status: false,
                 statusCode: 404,
@@ -269,7 +269,10 @@ export class AuthService {
     }
 
     async forgotPassword(email: string) {
-        const user = await UserModel.findOne({ email });
+        const cleanEmail = email?.trim().toLowerCase();
+        const user = await UserModel.findOne({
+            email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') }
+        });
 
         if (!user) {
             return {
@@ -279,27 +282,21 @@ export class AuthService {
             };
         }
 
-        // const rawToken = crypto.randomBytes(32).toString('hex');
-        // const hashedToken = crypto
-        //     .createHash('sha256')
-        //     .update(rawToken)
-        //     .digest('hex');
-
         const code = generateVerificationCode();
         user.resetPasswordCode = code;
         user.resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000);
 
-        // user.resetPasswordToken = hashedToken;
-        // user.resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000);
-
         await user.save();
 
-        await sendResetPasswordCodeEmail(email, code);
+        await sendResetPasswordCodeEmail(user.email, code);
 
         return {
             status: true,
             statusCode: 200,
             message: 'Password Reset code sent',
+            data: {
+                message: 'Password Reset code sent',
+            },
         };
     }
 
@@ -307,7 +304,12 @@ export class AuthService {
         code: string,
         newPassword: string) {
 
-        const user = await UserModel.findOne({ email });
+        const cleanEmail = email?.trim().toLowerCase();
+        const cleanCode = code?.trim();
+
+        const user = await UserModel.findOne({
+            email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') }
+        });
 
         if (!user) {
             return {
@@ -317,23 +319,7 @@ export class AuthService {
             };
         }
 
-        if (user.resetPasswordExpires! < new Date()) {
-            return {
-                status: false,
-                statusCode: 433,
-                message: 'Token expired',
-            };
-        }
-
-        if (user.resetPasswordCode !== code) {
-            return {
-                status: false,
-                statusCode: 433,
-                message: 'Invalid code',
-            };
-        }
-
-        if (user.resetPasswordExpires! < new Date()) {
+        if (!user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
             return {
                 status: false,
                 statusCode: 433,
@@ -341,12 +327,15 @@ export class AuthService {
             };
         }
 
-
+        if (user.resetPasswordCode !== cleanCode) {
+            return {
+                status: false,
+                statusCode: 433,
+                message: 'Invalid code',
+            };
+        }
 
         user.password = await hashPassword(newPassword);
-
-        // user.resetPasswordToken = undefined;
-        // user.resetPasswordExpires = undefined;
 
         user.resetPasswordCode = undefined;
         user.resetPasswordExpires = undefined;
@@ -359,6 +348,9 @@ export class AuthService {
             status: true,
             statusCode: 200,
             message: 'Password reset successful',
+            data: {
+                message: 'Password reset successful',
+            },
         };
     }
 
