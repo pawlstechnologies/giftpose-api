@@ -1,12 +1,24 @@
 import { DeviceAlertModel } from "./alerts.model";
 import ApiError from "../../utils/ApiError";
 // import categoryModel  //= require("modules/category/category.model");
-import { SubCategoryModel, CategoryModel, ContentModel } from "../category/category.model" //= require("modules/category/category.model");
+import { SubCategoryModel, CategoryModel, ContentModel } from "../category/category.model";
+import LocationModel from "../location/location.model";
 // import { ItemModel } from "../item/item.model";
 
 class AlertService {
   async createAlert(deviceId: string, data: any) {
-    // const alert = await DeviceAlertModel.create({ deviceId, ...data });
+    if (!data.firebaseToken) {
+      const location = await LocationModel.findOne({ deviceId });
+      if (location?.firebaseToken) {
+        data.firebaseToken = location.firebaseToken;
+      }
+    }
+    if (typeof data.status === "string") {
+      data.status =
+        data.status.toLowerCase() === "inactive" ? "Inactive" : "Active";
+    } else {
+      data.status = "Active";
+    }
     const alert = await DeviceAlertModel.findOneAndUpdate(
       { deviceId },
       { $set: data },
@@ -17,7 +29,6 @@ class AlertService {
       }
     );
     return alert;
-
   }
 
   async listAlerts(deviceId: string, page: number, limit: number) {

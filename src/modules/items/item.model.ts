@@ -148,6 +148,9 @@ const itemSchema = new Schema<ItemModel>(
 
 // 🔥 GEO INDEX
 itemSchema.index({ location: '2dsphere' });
-// itemSchema.index({ postId: 1 });
+itemSchema.index({ postId: 1 });
+itemSchema.index({ isTaken: 1, hiddenByDevices: 1, createdAt: -1 });
+itemSchema.index({ deviceId: 1, createdAt: -1 });
+itemSchema.index({ status: 1, expiration: 1 });
 
 export default model<ItemModel>('Item', itemSchema);

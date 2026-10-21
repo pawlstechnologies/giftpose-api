@@ -17,7 +17,8 @@ import {
     postItemRequest, 
     updateItem, 
     markItemAsInterested,
-    getMyDonations
+    getMyDonations,
+    deleteItem
 } from './item.controller';
 
 import { protect } from '../../middleware/auth.middleware';
@@ -42,6 +43,7 @@ router.post('/post', protect, postItem);
 router.post('/post-request', protect, postItemRequest);
 router.get('/pickup-options', protect, pickupOptions);
 router.patch('/update/:itemId', protect, updateItem);
+router.delete('/:itemId', protect, deleteItem);
 
 
 //request a gift

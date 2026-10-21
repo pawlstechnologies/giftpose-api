@@ -82,7 +82,51 @@ class AICategorisationService {
                     });
                 }
             } catch (err: any) {
-                console.error("AI categorisation failed:", err?.message || err);
+                console.error("AI categorisation failed, using local fallback:", err?.message || err);
+                const text = `${item.name || ""} ${item.description || ""}`.toLowerCase();
+                let matchedCat = fallback.category;
+                let matchedSub = fallback.subcategory;
+
+                for (const catNode of taxonomy) {
+                    const catWords = catNode.name.toLowerCase().split(/\W+/).filter((w: string) => w.length >= 3);
+                    const subMatch = (catNode.subcategories || []).find((subName: string) =>
+                        subName
+                            .toLowerCase()
+                            .split(/\W+/)
+                            .filter((w: string) => w.length >= 3)
+                            .some((w: string) => text.includes(w))
+                    );
+                    if (subMatch || catWords.some((w: string) => text.includes(w))) {
+                        const foundCat = await this.findByName<TaxonomyNode>(CategoryModel, catNode.name);
+                        if (foundCat) {
+                            matchedCat = foundCat;
+                            if (subMatch) {
+                                const foundSub = await this.findByName<TaxonomyNode>(
+                                    SubCategoryModel,
+                                    subMatch,
+                                    { categoryId: foundCat._id }
+                                );
+                                if (foundSub) matchedSub = foundSub;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                const updates: Record<string, unknown> = {
+                    categoryId: matchedCat._id,
+                    subCategoryId: matchedSub._id,
+                    contentId: fallback.content._id,
+                    isCategorised: true,
+                    status: "Live",
+                };
+
+                await ItemModel.updateOne({ _id: item._id }, { $set: updates });
+
+                categorised.push({
+                    ...item,
+                    ...updates,
+                });
             }
 
             if (index < items.length - 1 && delayMs > 0) {

@@ -237,7 +237,14 @@ IMPORTANT:
         if (!cleaned.length || !itemText.trim()) return false;
 
         const haystack = itemText.toLowerCase();
-        if (cleaned.some((keyword) => haystack.includes(keyword.toLowerCase()))) {
+        if (
+            cleaned.some((keyword) => {
+                const kw = keyword.toLowerCase();
+                if (haystack.includes(kw)) return true;
+                const words = kw.split(/\s+/).filter((w) => w.length >= 3);
+                return words.some((w) => haystack.includes(w));
+            })
+        ) {
             return true;
         }
 
@@ -273,6 +280,19 @@ IMPORTANT:
             } catch (err: any) {
                 lastError = err;
                 const status = err?.status || err?.response?.status;
+                const errCode = err?.code || err?.error?.code || err?.response?.data?.error?.code;
+                const errMsg = String(
+                    err?.error?.message || err?.response?.data?.error?.message || err?.message || ""
+                ).toLowerCase();
+
+                // Do not retry if quota/credits are exhausted
+                if (
+                    errCode === "insufficient_quota" ||
+                    errMsg.includes("no credits remaining") ||
+                    errMsg.includes("exceeded your current quota")
+                ) {
+                    throw this.sanitizeError(err);
+                }
 
                 if (status !== 429 && status !== 502 && status !== 503) {
                     throw this.sanitizeError(err);

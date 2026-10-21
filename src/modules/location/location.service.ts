@@ -71,11 +71,22 @@ export class LocationService {
             }
         };
 
+        // Check if an existing user has this deviceId
+        const existingUser = await UserModel.findOne({ deviceId });
+        if (existingUser) {
+            (locationData as any).user = existingUser._id;
+        }
+
         const savedLocation = await LocationModel.findOneAndUpdate(
             { deviceId },
             locationData,
             { new: true, upsert: true, runValidators: true }
         );
+
+        if (existingUser && !existingUser.locationId) {
+            existingUser.locationId = savedLocation._id;
+            await existingUser.save();
+        }
 
         return savedLocation.toObject();
     }
@@ -121,11 +132,6 @@ export class LocationService {
                 }
             },
             {
-                $match: {
-                    firebaseToken: { $exists: true, $nin: [null, ""] }
-                }
-            },
-            {
                 $addFields: {
                     distanceInMiles: { $divide: ["$distanceInMeters", 1609.34] }
                 }
@@ -134,6 +140,7 @@ export class LocationService {
                 $project: {
                     firebaseToken: 1,
                     deviceId: 1,
+                    user: 1,
                     distanceInMiles: 1,
                     miles: 1 // user preference
                 }

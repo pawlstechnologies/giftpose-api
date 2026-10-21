@@ -1,41 +1,54 @@
-// import admin from '../config/firebase
-
 import admin from '../config/firebase';
 
 export const sendPushNotification = async (
     deviceToken: string,
     title: string,
-    body: string
+    body: string,
+    data?: Record<string, string>
 ) => {
-    await admin.messaging().send({
-        token: deviceToken,
-        notification: {
-            title,
-            body
-        }
-    });
+    if (!deviceToken || !deviceToken.trim()) {
+        console.log('⚠️ Empty deviceToken. Skipping push.');
+        return;
+    }
+
+    try {
+        await admin.messaging().send({
+            token: deviceToken.trim(),
+            notification: {
+                title,
+                body
+            },
+            ...(data ? { data } : {})
+        });
+        console.log('✅ Single push notification sent');
+    } catch (err: any) {
+        console.error('❌ Single push notification error:', err?.message || err);
+    }
 };
 
 export const sendBulkPushNotification = async (
     tokens: string[],
     title: string,
-    body: string
+    body: string,
+    data?: Record<string, string>
 ) => {
+    const cleanTokens = Array.from(
+        new Set((tokens || []).map((t) => t?.trim()).filter(Boolean))
+    ) as string[];
 
     console.log('📲 Preparing to send push notifications...');
-    console.log('📲 Tokens count:', tokens.length);
+    console.log('📲 Tokens count:', cleanTokens.length);
 
-
-    if (!tokens.length) {
+    if (!cleanTokens.length) {
         console.log('⚠️ No tokens found. Skipping push.');
         return;
     }
 
-
     try {
         const response = await admin.messaging().sendEachForMulticast({
-            tokens,
-            notification: { title, body }
+            tokens: cleanTokens,
+            notification: { title, body },
+            ...(data ? { data } : {})
         });
 
         console.log('✅ Push sent successfully');
@@ -45,25 +58,14 @@ export const sendBulkPushNotification = async (
         if (response.failureCount > 0) {
             response.responses.forEach((resp, idx) => {
                 if (!resp.success) {
-                    console.log(`❌ Failed token: ${tokens[idx]}`);
+                    console.log(`❌ Failed token: ${cleanTokens[idx]}`);
                     console.log(`   Error: ${resp.error?.message}`);
                 }
             });
         }
-
     } catch (err: any) {
-        console.error('❌ Push notification error:', err.message);
+        console.error('❌ Push notification error:', err?.message || err);
     }
-
-
-
-    //   await admin.messaging().sendEachForMulticast({
-    //     tokens,
-    //     notification: {
-    //       title,
-    //       body
-    //     }
-    //   });
 };
 
 

@@ -55,6 +55,7 @@ export class AuthService {
 
         const user = await UserModel.create({
             deviceId,
+            locationId: location._id,
             fullname,
             email,
             username,
@@ -62,6 +63,10 @@ export class AuthService {
             verificationCode: code,
             verificationCodeExpires: new Date(Date.now() + 10 * 60 * 1000) // 10 mins
         });
+
+        // Attach user to Location
+        location.user = user._id;
+        await location.save();
 
         await sendVerificationEmail(email, code);
 
@@ -121,6 +126,19 @@ export class AuthService {
 
             user.refreshToken = refreshToken;
             await user.save();
+
+            // Ensure user is attached to device location
+            if (user.deviceId) {
+                const loc = await LocationModel.findOneAndUpdate(
+                    { deviceId: user.deviceId },
+                    { user: user._id },
+                    { new: true }
+                );
+                if (loc && !user.locationId) {
+                    user.locationId = loc._id;
+                    await user.save();
+                }
+            }
 
             return {
                 status: true,
@@ -259,6 +277,20 @@ export class AuthService {
         user.verificationCodeExpires = undefined;
 
         await user.save();
+
+        // Ensure user is attached to device location
+        if (user.deviceId) {
+            const loc = await LocationModel.findOneAndUpdate(
+                { deviceId: user.deviceId },
+                { user: user._id },
+                { new: true }
+            );
+            if (loc && !user.locationId) {
+                user.locationId = loc._id;
+                await user.save();
+            }
+        }
+
         return {
             status: true,
             statusCode: 200,

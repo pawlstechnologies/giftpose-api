@@ -532,3 +532,21 @@ export const getMyDonations = async (req: AuthRequest, res: Response) => {
     }
 };
 
+export const deleteItem = async (req: AuthRequest<{ itemId: string }>, res: Response) => {
+    try {
+        const user = req.user;
+        if (!user) {
+            return res.status(401).json({
+                message: 'Unauthorized'
+            });
+        }
+
+        const result = await itemService.deleteItem(req.params.itemId, user);
+        return res.status(200).json(result);
+    } catch (err: any) {
+        return res.status(400).json({
+            message: err.message
+        });
+    }
+};
+

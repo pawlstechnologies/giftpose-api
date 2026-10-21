@@ -13,10 +13,14 @@ import { CategoryModel } from "../category/category.model";
 import { SubCategoryModel } from "../category/category.model";
 import { ContentModel } from "../category/category.model";
 import { uploadToCloudinary } from "../../utils/uploadToCloudinary";
-import { sendPostCreatedEmail, sendPostRequestEmail } from "../../utils/email";
+import {
+    sendPostCreatedEmail,
+    sendPostRequestEmail,
+    sendNewItemAlertEmail
+} from "../../utils/email";
 import NotificationModels from "../notification/notification.models";
 import { LocationService } from "../location/location.service";
-import { sendBulkPushNotification } from "../../utils/push";
+import { sendBulkPushNotification, sendPushNotification } from "../../utils/push";
 import OpenAI from "openai";
 import { DeviceAlertModel } from "../alerts/alerts.model";
 import { UserModel } from "../onboarding/auth.model";
@@ -229,7 +233,7 @@ export default class ItemService {
 
     async postItem(data: any, file: any, user: any) {
 
-        const {
+        let {
             name,
             description,
             categoryId,
@@ -238,72 +242,106 @@ export default class ItemService {
             suggestedCategoryId,
             suggestedSubcategoryId,
             suggestedContentId,
-            imageUrls,
+            imageUrls = [],
             postCode,
-            country } = data;
+            country = 'United Kingdom',
+            pickup = 'Pickup'
+        } = data;
 
-        const finalCategoryId = categoryId || suggestedCategoryId;
-        const finalSubcategoryId = subcategoryId || suggestedSubcategoryId;
-        const finalContentId = contentId || suggestedContentId;
-
-        if (!finalCategoryId || !finalSubcategoryId || !finalContentId) {
-            throw new Error('Invalid category structure');
+        if (file && file.path) {
+            imageUrls.push(file.path);
         }
 
-        if (!mongoose.Types.ObjectId.isValid(finalCategoryId)) {
-            throw new Error('Invalid category ID');
+        let finalCategoryId = categoryId || suggestedCategoryId;
+        let finalSubcategoryId = subcategoryId || suggestedSubcategoryId;
+        let finalContentId = contentId || suggestedContentId;
+
+        // Auto-resolve category if missing or invalid
+        if (!finalCategoryId || !mongoose.Types.ObjectId.isValid(finalCategoryId)) {
+            const cat = await CategoryModel.findOne();
+            if (cat) finalCategoryId = cat._id;
         }
 
-        if (!mongoose.Types.ObjectId.isValid(finalSubcategoryId)) {
-            throw new Error('Invalid subcategory ID');
+        if (!finalSubcategoryId || !mongoose.Types.ObjectId.isValid(finalSubcategoryId)) {
+            const sub = await SubCategoryModel.findOne(finalCategoryId ? { categoryId: finalCategoryId } : {});
+            if (sub) {
+                finalSubcategoryId = sub._id;
+            } else {
+                const anySub = await SubCategoryModel.findOne();
+                if (anySub) finalSubcategoryId = anySub._id;
+            }
         }
 
-        if (!mongoose.Types.ObjectId.isValid(finalContentId)) {
-            throw new Error('Invalid content ID');
+        if (!finalContentId || !mongoose.Types.ObjectId.isValid(finalContentId)) {
+            const content = await ContentModel.findOne(finalSubcategoryId ? { subcategoryId: finalSubcategoryId } : {});
+            if (content) {
+                finalContentId = content._id;
+            } else {
+                const anyContent = await ContentModel.findOne();
+                if (anyContent) finalContentId = anyContent._id;
+            }
         }
 
+        let city = '';
+        let coordinates = [0, 0];
+
+        // Resolve location
+        let userLocation: any = null;
+        if (user?._id) {
+            userLocation = await LocationModel.findOne({ user: user._id });
+        }
+        if (!userLocation && user?.deviceId) {
+            userLocation = await LocationModel.findOne({ deviceId: user.deviceId });
+        }
+
+        if (!postCode && userLocation?.postcode) {
+            postCode = userLocation.postcode;
+        }
+        if (!postCode) {
+            postCode = 'SW1A 1AA';
+        }
 
         const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-
-        if (!apiKey) {
-            throw new Error('Google Maps API key is not configured');
-        }
-
-        const response = await axios.get(
-            'https://maps.googleapis.com/maps/api/geocode/json',
-            {
-                params: { address: postCode, key: apiKey }
+        if (apiKey && postCode) {
+            try {
+                const response = await axios.get(
+                    'https://maps.googleapis.com/maps/api/geocode/json',
+                    {
+                        params: { address: postCode, key: apiKey }
+                    }
+                );
+                const geoData = response.data;
+                if (geoData.status === 'OK' && geoData.results?.length) {
+                    const result = geoData.results[0];
+                    coordinates = [result.geometry.location.lng, result.geometry.location.lat];
+                    const cityComponent = result.address_components.find((comp: any) =>
+                        comp.types.includes('locality') || comp.types.includes('postal_town')
+                    );
+                    city = cityComponent?.long_name || '';
+                }
+            } catch (err) {
+                console.warn('Geocoding in postItem failed:', err);
             }
-        );
-
-        const geoData = response.data;
-
-        if (geoData.status !== 'OK' || !geoData.results.length) {
-            throw new Error('Location not found for the provided postcode');
         }
 
-        const result = geoData.results[0];
-        const location = result.geometry.location;
-
-        const cityComponent = result.address_components.find((comp: any) =>
-            comp.types.includes('locality') ||
-            comp.types.includes('postal_town')
-        );
-
-        const city = cityComponent?.long_name || '';
-
-
-        // const userId = user._id;
-        // const deviceId = user.deviceId;
-
+        if (coordinates[0] === 0 && coordinates[1] === 0 && userLocation) {
+            coordinates = [userLocation.longitude || 0, userLocation.latitude || 0];
+            city = userLocation.city || city || 'London';
+        }
+        if (!city && userLocation?.city) {
+            city = userLocation.city;
+        }
+        if (!city) {
+            city = country || 'United Kingdom';
+        }
 
         // 🔥 3. Create item
         const item = await ItemModel.create({
             userId: user._id,
             deviceId: user.deviceId,
 
-            name,
-            description,
+            name: name || 'Gift Item',
+            description: description || '',
             imageUrls,
 
             categoryId: finalCategoryId,
@@ -318,7 +356,7 @@ export default class ItemService {
 
             location: {
                 type: 'Point',
-                coordinates: [location.lng, location.lat]
+                coordinates
             },
 
             partner: 'Gifpose', ///user.email,
@@ -329,24 +367,18 @@ export default class ItemService {
 
             status: 'Live',
             type: "offer",
+            pickup: pickup || 'Pickup',
 
             thumbnail: imageUrls?.[0] || ''
         });
 
-        // setImmediate(async () => {
-        //     try {
-        //         await this.handlePostSideEffects(user, item);
-        //     } catch (err) {
-        //         console.error('❌ Side effect error:', err);
-        //     }
-        // });
-
-
-
-        await this.handlePostSideEffects(user, item);
+        try {
+            await this.handlePostSideEffects(user, item);
+        } catch (e) {
+            console.error('Post side effect error:', e);
+        }
 
         return item;
-
     }
 
     async getTaxonomy() {
@@ -709,29 +741,74 @@ export default class ItemService {
 
     async handlePostSideEffects(user: any, item: any) {
         try {
-
             console.log('🚀 Running post side effects...');
 
-            //notify user in-app notification
-            await NotificationModels.create({
-                deviceId: user.deviceId,
-                userId: user._id,
-                title: 'Item Posted',
-                message: `${item.name} is now live`,
-                type: 'Item_Posted',
-                img: item.thumbnail || 'https://res.cloudinary.com/dxfq3iotg/image/upload/v1692099205/giftpose/default-item.png',
-                data: { itemId: item._id }
-            });
-            console.log('🔔 In-app notification created');
+            const defaultImg =
+                item.thumbnail ||
+                item.imageUrls?.[0] ||
+                'https://res.cloudinary.com/dxfq3iotg/image/upload/v1692099205/giftpose/default-item.png';
 
+            let posterLocation: any = null;
+            if (user?._id) {
+                posterLocation = await LocationModel.findOne({ user: user._id }).lean();
+            }
+            if (!posterLocation && user?.deviceId) {
+                posterLocation = await LocationModel.findOne({ deviceId: user.deviceId }).lean();
+            }
 
-            //notify user by email 
-            await sendPostCreatedEmail(user.email, item);
+            const posterDeviceId =
+                user?.deviceId ||
+                posterLocation?.deviceId ||
+                item.deviceId ||
+                String(user?._id || '');
 
-            console.log('📧 Email sent to:', user.email);
+            // 1. Notify poster In-App
+            try {
+                if (posterDeviceId) {
+                    await NotificationModels.create({
+                        deviceId: posterDeviceId,
+                        userId: user?._id,
+                        title: 'Item Posted',
+                        message: `${item.name} is now live`,
+                        type: 'Item_Posted',
+                        img: defaultImg,
+                        data: { itemId: String(item._id) }
+                    });
+                    console.log('🔔 In-app notification created for poster');
+                }
+            } catch (inAppErr: any) {
+                console.error('⚠️ Poster in-app notification error:', inAppErr?.message || inAppErr);
+            }
 
+            // 2. Notify poster via Push Notification
+            try {
+                const posterAlert = posterDeviceId
+                    ? await DeviceAlertModel.findOne({ deviceId: posterDeviceId }).lean()
+                    : null;
+                const posterFcmToken =
+                    posterLocation?.firebaseToken || (posterAlert as any)?.firebaseToken;
+                if (posterFcmToken) {
+                    await sendPushNotification(
+                        posterFcmToken,
+                        'Item Posted 🎉',
+                        `${item.name} is now live on GiftPose!`,
+                        {
+                            id: String(item._id),
+                            itemId: String(item._id),
+                            type: 'Item_Posted'
+                        }
+                    );
+                }
+            } catch (pushErr: any) {
+                console.error('⚠️ Poster push notification error:', pushErr?.message || pushErr);
+            }
 
+            // 3. Notify poster by Email
+            if (user?.email) {
+                await sendPostCreatedEmail(user.email, item);
+            }
 
+            // 4. Find nearby devices & match keyword/category alerts
             const locationService = new LocationService();
 
             const devices = await locationService.getDevicesNearItem(
@@ -739,12 +816,11 @@ export default class ItemService {
                 item.location.coordinates[1]  // lat
             );
 
-
             if (!devices.length) return;
-            //fetch keywords
-            const deviceIds = devices.map((d: any) => d.deviceId);
+
+            const deviceIds = devices.map((d: any) => d.deviceId).filter(Boolean);
             const alerts = await DeviceAlertModel.find({
-                status: 'Active',
+                status: { $in: ['Active', 'active'] },
                 deviceId: { $in: deviceIds }
             });
 
@@ -752,16 +828,17 @@ export default class ItemService {
 
             if (!alerts.length) return;
 
-
             const matchedDevices: any[] = [];
 
             for (const alert of alerts) {
                 const match = await OpenAIClient.matchesAlert(item, alert, 0.55);
                 if (match) {
+                    const dev = devices.find((d: any) => d.deviceId === alert.deviceId);
                     matchedDevices.push({
                         deviceId: alert.deviceId,
-                        firebaseToken: alert.firebaseToken,
-                        distanceInMiles: devices.find(d => d.deviceId === alert.deviceId)?.distanceInMiles || 0
+                        userId: dev?.user,
+                        firebaseToken: alert.firebaseToken || dev?.firebaseToken,
+                        distanceInMiles: dev?.distanceInMiles || 0
                     });
                 }
             }
@@ -770,35 +847,70 @@ export default class ItemService {
 
             if (!matchedDevices.length) return;
 
+            const finalDevices = matchedDevices.filter(
+                (d) => d.deviceId && d.deviceId !== posterDeviceId
+            );
+            console.log('📲 Final matched devices for notification:', finalDevices.length);
 
-            const finalDevices = matchedDevices.filter(d => d.deviceId !== user.deviceId);
-            const tokens = finalDevices.map(d => d.firebaseToken).filter(Boolean);
-
-            // const tokens = devices.filter(d => d.deviceId !== user.deviceId).map(d => d.firebaseToken); ///remove user
-            // const tokens = devices.map((d: any) => d.firebaseToken);
-
-            console.log('📲 Final tokens:', tokens);
             for (const d of finalDevices) {
-                const distanceText = d.distanceInMiles ? `${d.distanceInMiles.toFixed(1)} miles away` : '';
-                await sendBulkPushNotification(
-                    [d.firebaseToken],
-                    `${item.name} posted near you 📍`,
-                    `${item.description} ${distanceText}`
-                );
+                const distanceText = d.distanceInMiles
+                    ? `${d.distanceInMiles.toFixed(1)} miles away`
+                    : '';
+                const alertTitle = `Gift Alert: ${item.name}`;
+                const alertMessage = item.description
+                    ? `${item.description} ${distanceText ? `(${distanceText})` : ''}`.trim()
+                    : `${item.name} posted near you ${distanceText ? `(${distanceText})` : ''}`.trim();
+
+                // Look up user associated with this device for userId & email
+                const matchedUser = await UserModel.findOne({
+                    $or: [
+                        { deviceId: d.deviceId },
+                        ...(d.userId ? [{ _id: d.userId }] : [])
+                    ]
+                }).lean();
+
+                // A. Send Push Notification if token exists
+                if (d.firebaseToken) {
+                    await sendBulkPushNotification(
+                        [d.firebaseToken],
+                        alertTitle,
+                        alertMessage,
+                        {
+                            id: String(item._id),
+                            itemId: String(item._id),
+                            type: 'New_Item_Alert'
+                        }
+                    );
+                }
+
+                // B. Insert In-App Notification
+                await NotificationModels.create({
+                    deviceId: d.deviceId,
+                    ...(matchedUser?._id || d.userId
+                        ? { userId: matchedUser?._id || d.userId }
+                        : {}),
+                    title: alertTitle,
+                    message: alertMessage,
+                    type: 'New_Item_Alert',
+                    img: defaultImg,
+                    data: {
+                        itemId: String(item._id),
+                        distanceInMiles: d.distanceInMiles
+                    }
+                });
+
+                // C. Send Email Alert if matched device belongs to a registered user
+                if (matchedUser?.email) {
+                    await sendNewItemAlertEmail(
+                        matchedUser.email,
+                        item,
+                        d.distanceInMiles
+                    );
+                }
             }
-
-
-            // await sendBulkPushNotification(
-            //     tokens,
-            //     // '${item.name} Item Near You 📍',
-            //     `${item.name} posted near you 📍`,
-            //     `${item.description}`
-            // );
-
         } catch (err: any) {
-            console.error('❌ Side effect error:', err.message);
+            console.error('❌ Side effect error:', err?.message || err);
         }
-
     }
 
     async getItemsNearLocation(deviceId: String, limit: number, offset: number) {
@@ -901,7 +1013,8 @@ export default class ItemService {
                 thumbnail: item.imageUrls?.[0] || null,
                 visitCount: item.visitCount ?? 0,
                 distanceInMeters: item.distanceInMeters ?? 0,
-                distanceInMiles: item.distanceInMiles ?? 0
+                distanceInMiles: item.distanceInMiles ?? 0,
+                isAiSuggested: Boolean(item.isCategorised || (item.visitCount && item.visitCount > 10))
             })),
             total
         };
@@ -966,7 +1079,8 @@ export default class ItemService {
                 thumbnail: item.imageUrls?.[0] || item.thumbnail || null,
                 visitCount: item.visitCount ?? 0,
                 distanceInMeters: item.distanceInMeters ?? 0,
-                distanceInMiles: item.distanceInMiles ?? 0
+                distanceInMiles: item.distanceInMiles ?? 0,
+                isAiSuggested: Boolean(item.isCategorised || (item.visitCount && item.visitCount > 10))
             })),
 
         }
@@ -1111,6 +1225,15 @@ export default class ItemService {
 
         await item.save();
 
+        try {
+            const posterUser = item.userId ? await UserModel.findById(item.userId) : null;
+            await this.sendNotificationToPoster(posterUser, item, {
+                requesterDeviceId: deviceId
+            });
+        } catch (err: any) {
+            console.error("⚠️ markItemAsTaken notification error:", err?.message || err);
+        }
+
         return {
             status: true,
             statusCode: 200,
@@ -1166,7 +1289,7 @@ export default class ItemService {
         }
 
         //fetch poster user id from item model
-        const user = await UserModel.findById(item.userId);
+        const user = item.userId ? await UserModel.findById(item.userId) : null;
 
         // Add interest
         item.interestedByDevices.push({
@@ -1178,7 +1301,11 @@ export default class ItemService {
 
         await item.save();
 
-        await this.sendNotificationToPoster(user, item);
+        await this.sendNotificationToPoster(user, item, {
+            requesterDeviceId: deviceId,
+            requesterUserId: userId,
+            message: message || ""
+        });
 
         return {
             status: true,
@@ -1190,27 +1317,92 @@ export default class ItemService {
     }
 
 
-    async sendNotificationToPoster(user: any, item: any) {
-        console.log('🚀 Running post side effects...');
+    async sendNotificationToPoster(
+        user: any,
+        item: any,
+        requesterInfo?: { requesterDeviceId?: string; requesterUserId?: string; message?: string }
+    ) {
+        try {
+            console.log('🚀 Running request notification side effects...');
 
-        //notify user in-app notification
-        await NotificationModels.create({
-            deviceId: user.deviceId,
-            userId: user._id,
-            title: 'Item Request',
-            message: `${item.name} is now live`,
-            type: 'Item_Request',
-            img: item.thumbnail || 'https://res.cloudinary.com/dxfq3iotg/image/upload/v1692099205/giftpose/default-item.png',
-            data: { itemId: item._id }
-        });
-        console.log('🔔 In-app notification created');
+            const defaultImg =
+                item.thumbnail ||
+                item.imageUrls?.[0] ||
+                'https://res.cloudinary.com/dxfq3iotg/image/upload/v1692099205/giftpose/default-item.png';
 
-        //notify user by email 
-        await sendPostRequestEmail(user.email, item);
+            const posterUserId = user?._id || item.userId;
+            let posterLocation: any = null;
+            if (posterUserId) {
+                posterLocation = await LocationModel.findOne({ user: posterUserId }).lean();
+            }
+            if (!posterLocation && (user?.deviceId || item.deviceId)) {
+                posterLocation = await LocationModel.findOne({
+                    deviceId: user?.deviceId || item.deviceId
+                }).lean();
+            }
 
-        console.log('📧 Email sent to:', user.email);
+            const posterDeviceId =
+                user?.deviceId ||
+                item.deviceId ||
+                posterLocation?.deviceId ||
+                (posterUserId ? String(posterUserId) : '');
 
+            // 1. In-App Notification for Poster
+            if (posterDeviceId) {
+                await NotificationModels.create({
+                    deviceId: posterDeviceId,
+                    ...(posterUserId ? { userId: posterUserId } : {}),
+                    title: 'New Item Request',
+                    message: `Someone is interested in "${item.name}"`,
+                    type: 'Item_Request',
+                    img: defaultImg,
+                    data: { itemId: String(item._id) }
+                });
+                console.log('🔔 In-app request notification created for poster');
+            }
 
+            // 2. Push Notification for Poster
+            const posterAlert = posterDeviceId
+                ? await DeviceAlertModel.findOne({ deviceId: posterDeviceId }).lean()
+                : null;
+            const posterFcmToken =
+                posterLocation?.firebaseToken || (posterAlert as any)?.firebaseToken;
+            if (posterFcmToken) {
+                await sendPushNotification(
+                    posterFcmToken,
+                    'New Item Request 🔍',
+                    `Someone is interested in "${item.name}"`,
+                    {
+                        id: String(item._id),
+                        itemId: String(item._id),
+                        type: 'Item_Request'
+                    }
+                );
+            }
+
+            // 3. Email Notification for Poster
+            if (user?.email) {
+                await sendPostRequestEmail(user.email, item, requesterInfo?.message);
+            }
+
+            // 4. In-App Confirmation for Requester
+            if (requesterInfo?.requesterDeviceId) {
+                await NotificationModels.create({
+                    deviceId: requesterInfo.requesterDeviceId,
+                    ...(requesterInfo.requesterUserId &&
+                    mongoose.Types.ObjectId.isValid(requesterInfo.requesterUserId)
+                        ? { userId: new mongoose.Types.ObjectId(requesterInfo.requesterUserId) }
+                        : {}),
+                    title: 'Request Sent',
+                    message: `Your interest in "${item.name}" has been sent to the giver`,
+                    type: 'Item_Request',
+                    img: defaultImg,
+                    data: { itemId: String(item._id) }
+                });
+            }
+        } catch (err: any) {
+            console.error('❌ sendNotificationToPoster error:', err?.message || err);
+        }
     }
 
 
@@ -1332,7 +1524,18 @@ export default class ItemService {
         return items;
     }
 
-
-
-
+    async deleteItem(itemId: string, user: any) {
+        if (!mongoose.Types.ObjectId.isValid(itemId)) {
+            throw new Error("Invalid item ID");
+        }
+        const item = await ItemModel.findById(itemId);
+        if (!item) {
+            throw new Error("Item not found");
+        }
+        if (item.userId && item.userId.toString() !== (user._id || user.id).toString() && item.deviceId !== user.deviceId) {
+            throw new Error("Unauthorized");
+        }
+        await ItemModel.findByIdAndDelete(itemId);
+        return { success: true, message: "Item deleted successfully" };
+    }
 }

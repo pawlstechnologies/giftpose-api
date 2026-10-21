@@ -34,6 +34,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IUser extends Document {
     deviceId: string;
+    locationId?: mongoose.Types.ObjectId;
     fullname: string;
     email: string;
     username: string;
@@ -53,6 +54,7 @@ export interface IUser extends Document {
 const UserSchema = new Schema<IUser>(
     {
         deviceId: { type: String, required: true, unique: true },
+        locationId: { type: Schema.Types.ObjectId, ref: 'Location' },
         fullname: { type: String, required: true, trim: true },
 
         email: {

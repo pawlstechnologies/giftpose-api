@@ -8,6 +8,8 @@ import { LocationService } from '../location/location.service';
 import { DeviceAlertModel } from '../alerts/alerts.model';
 import OpenAIClient from '../../utils/openai.client';
 import { sendBulkPushNotification } from '../../utils/push';
+import { sendNewItemAlertEmail } from '../../utils/email';
+import { UserModel } from '../onboarding/auth.model';
 
 import NotificationModels from "../notification/notification.models"; //"../notification/notification.models";
 
@@ -28,8 +30,8 @@ class TrashNothingSyncService {
     private isRunning = false;
 
     constructor() {
-        // Start from 1 minute ago on boot
-        this.lastSync = new Date(Date.now() - 60 * 1000);
+        // Look back 24 hours on initial boot
+        this.lastSync = new Date(Date.now() - 24 * 60 * 60 * 1000);
     }
 
     // async syncTrashNothing() {
@@ -239,7 +241,7 @@ class TrashNothingSyncService {
 
                     const deviceIds = devices.map((d: any) => d.deviceId);
                     const alerts = await DeviceAlertModel.find({
-                        status: 'Active',
+                        status: { $in: ['Active', 'active'] },
                         deviceId: { $in: deviceIds }
                     });
 
@@ -260,7 +262,8 @@ class TrashNothingSyncService {
 
                             return {
                                 deviceId: alert.deviceId,
-                                firebaseToken: alert.firebaseToken,
+                                userId: device?.user,
+                                firebaseToken: alert.firebaseToken || device?.firebaseToken,
                                 distanceInMiles: device?.distanceInMiles || 0
                             };
                         })
@@ -278,21 +281,44 @@ class TrashNothingSyncService {
                         await sendBulkPushNotification(
                             tokens,
                             `${item.name} near you 📍`,
-                            `${item.description || ''}`.trim()
+                            `${item.description || ''}`.trim(),
+                            {
+                                id: String(item._id),
+                                itemId: String(item._id),
+                                type: 'New_Item_Alert'
+                            }
                         );
                     }
 
                     const img = item.thumbnail || item.imageUrls?.[0] || '';
 
                     for (const d of matchedDevices) {
+                        const matchedUser = await UserModel.findOne({
+                            $or: [
+                                { deviceId: d.deviceId },
+                                ...(d.userId ? [{ _id: d.userId }] : [])
+                            ]
+                        }).lean();
+
                         await NotificationModels.create({
                             deviceId: d.deviceId,
+                            ...(matchedUser?._id || d.userId
+                                ? { userId: matchedUser?._id || d.userId }
+                                : {}),
                             title: 'New Item Near You',
                             message: `${item.name} is available near you`,
                             type: 'New_Item_Alert',
                             img,
-                            data: { itemId: item._id }
+                            data: { itemId: String(item._id) }
                         });
+
+                        if (matchedUser?.email) {
+                            await sendNewItemAlertEmail(
+                                matchedUser.email,
+                                item,
+                                d.distanceInMiles
+                            );
+                        }
                     }
 
                     console.log('✅ Notifications sent');
@@ -312,6 +338,9 @@ class TrashNothingSyncService {
     }
 
     start() {
+        // Trigger immediate sync on start
+        this.syncTrashNothing();
+
         cron.schedule('* * * * *', async () => {
             await this.syncTrashNothing();
         });
