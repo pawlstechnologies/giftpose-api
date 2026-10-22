@@ -55,10 +55,16 @@ export class AdminController {
     static async dashboard(req: AuthRequest, res: Response) {
         try {
             const adminId = req.user.id; // from auth middleware
-            const result = await AdminAuthService.getDashboardData(adminId);
-            res.status(200).json(result);
+            const { period, startDate, endDate } = req.query as any;
+            const result = await AdminAuthService.getDashboardData({
+                adminId,
+                period: (period as any) || '30',
+                startDate: startDate as string,
+                endDate: endDate as string
+            });
+            res.status(200).json({ success: true, data: result });
         } catch (err: any) {
-            res.status(500).json({ message: err.message });
+            res.status(500).json({ success: false, message: err.message });
         }   
     }   
 

@@ -9,12 +9,14 @@ import {
   ContentModel,
 } from "../../modules/category/category.model";
 import { ActivityLogModel } from "../activityLog/activity.model";
+import NotificationModel from "../../modules/notification/notification.models";
 
 // Explicitly touch models so mongoose registers them for populate
 void CategoryModel;
 void SubCategoryModel;
 void ContentModel;
 void ActivityLogModel;
+void NotificationModel;
 import {
   AdminUserListItem,
   AdminUserListResponse,
@@ -246,37 +248,63 @@ export class AdminUserService {
       }
     }
 
-    // Build timeline of recent activity for this user
-    const recentActivity: UserActivityItem[] = [
-      {
-        id: "act-1",
-        title: "Viewed Gift Category",
-        description: `User browsed the "${itemsOfInterest[0]?.category || 'Home Decor'}" category for 15 minutes.`,
-        timestamp: "Today, 10:45 AM",
-        type: "view",
-      },
-      {
-        id: "act-2",
-        title: "Updated Profile",
-        description: `User updated account preferences and notifications.`,
-        timestamp: "Yesterday, 03:20 PM",
+    // Build timeline of recent activity for this user combining account events & notifications
+    const recentActivity: UserActivityItem[] = [];
+
+    // Pull real notifications if any
+    const userNotifications = await NotificationModel.find({ deviceId: user.deviceId })
+      .sort({ createdAt: -1 })
+      .limit(4)
+      .lean();
+
+    userNotifications.forEach((notif: any, idx: number) => {
+      recentActivity.push({
+        id: `notif-${notif._id}`,
+        title: notif.title || "Item Alert Sent",
+        description: notif.message || "Alert dispatched to user device",
+        timestamp: notif.createdAt ? new Date(notif.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Recent",
+        type: "notification"
+      });
+    });
+
+    if (alert) {
+      recentActivity.push({
+        id: "act-alert",
+        title: "Alert Preferences Saved",
+        description: `Active keywords configured: ${(alert.keywords || []).slice(0, 4).join(", ")}.`,
+        timestamp: alert.updated_at ? new Date(alert.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Active",
         type: "update",
-      },
-      {
-        id: "act-3",
-        title: "Logged in",
-        description: `Successful login from ${location?.city || 'London'} via mobile app.`,
-        timestamp: "Oct 24, 09:00 AM",
+      });
+    }
+
+    if (location) {
+      const locAny = location as any;
+      recentActivity.push({
+        id: "act-loc",
+        title: "Location Area Registered",
+        description: `Set discovery radius (${locAny.miles || 5} miles) around ${locAny.address || locAny.city || "Crewe, UK"}.`,
+        timestamp: locAny.updatedAt ? new Date(locAny.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Active",
+        type: "location",
+      });
+    }
+
+    if (user.createdAt) {
+      recentActivity.push({
+        id: "act-reg",
+        title: "Account Created",
+        description: `User registered with ${user.email} and verified profile.`,
+        timestamp: new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         type: "auth",
-      },
-    ];
+      });
+    }
 
     if (isSubActive) {
+      const subAny = subscription as any;
       recentActivity.push({
-        id: "act-4",
-        title: "Subscription Renewed",
-        description: `Automated renewal for ${planType} tier processed successfully.`,
-        timestamp: "Oct 15, 12:00 AM",
+        id: "act-sub",
+        title: "Subscription Active",
+        description: `User subscribed to ${planType} tier.`,
+        timestamp: subAny?.createdAt ? new Date(subAny.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Active",
         type: "subscription",
       });
     }
@@ -289,10 +317,12 @@ export class AdminUserService {
       isVerified: Boolean(user.isVerified),
       avatarUrl: undefined,
       deviceId: user.deviceId,
+      createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : undefined,
       location: {
         city: location?.city || "London",
         address: location?.address || undefined,
         postCode: location?.postCode || "SW1A 1AA",
+        miles: location?.miles || 5,
       },
       subscription: {
         planType,
@@ -306,6 +336,39 @@ export class AdminUserService {
       },
       itemsOfInterest,
       recentActivity,
+    };
+  }
+
+  /**
+   * Toggle user email/identity verification status
+   */
+  static async toggleVerification(userId: string) {
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+    user.isVerified = !user.isVerified;
+    await user.save();
+    return {
+      id: user._id.toString(),
+      isVerified: user.isVerified,
+    };
+  }
+
+  /**
+   * Update user status (e.g. active, suspended)
+   */
+  static async updateUserStatus(userId: string, status: string) {
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+    // Store in user doc or custom flag
+    (user as any).status = status;
+    await user.save();
+    return {
+      id: user._id.toString(),
+      status,
     };
   }
 }

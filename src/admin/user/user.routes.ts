@@ -12,5 +12,7 @@ router.use(adminAuthMiddleware());
 
 router.get("/", AdminUserController.listUsers);
 router.get("/:userId", AdminUserController.getUserDetail);
+router.patch("/:userId/verify", AdminUserController.toggleVerification);
+router.patch("/:userId/status", AdminUserController.updateUserStatus);
 
 export default router;

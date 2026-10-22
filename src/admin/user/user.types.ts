@@ -48,7 +48,7 @@ export interface UserActivityItem {
   title: string;
   description: string;
   timestamp: string;
-  type: 'view' | 'update' | 'auth' | 'subscription' | 'other';
+  type: 'view' | 'update' | 'auth' | 'subscription' | 'notification' | 'location' | 'other';
 }
 
 export interface AdminUserDetail {
@@ -59,10 +59,12 @@ export interface AdminUserDetail {
   isVerified: boolean;
   avatarUrl?: string;
   deviceId?: string;
+  createdAt?: string;
   location: {
     city: string;
     address?: string;
     postCode: string;
+    miles?: number;
   };
   subscription: UserSubscriptionDetail;
   notificationPreferences: {

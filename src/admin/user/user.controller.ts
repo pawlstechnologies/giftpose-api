@@ -50,4 +50,43 @@ export class AdminUserController {
       });
     }
   }
+
+  static async toggleVerification(req: Request, res: Response) {
+    try {
+      const userId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
+      if (!userId) {
+        return res.status(400).json({ success: false, message: "User ID is required" });
+      }
+
+      const updatedUser = await AdminUserService.toggleVerification(userId);
+      return res.status(200).json({
+        success: true,
+        message: `User ${updatedUser.isVerified ? "verified" : "unverified"} successfully`,
+        data: updatedUser,
+      });
+    } catch (err: any) {
+      console.error("Failed to toggle verification:", err);
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async updateUserStatus(req: Request, res: Response) {
+    try {
+      const userId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
+      const { status } = req.body;
+      if (!userId) {
+        return res.status(400).json({ success: false, message: "User ID is required" });
+      }
+
+      const updatedUser = await AdminUserService.updateUserStatus(userId, status);
+      return res.status(200).json({
+        success: true,
+        message: "User status updated successfully",
+        data: updatedUser,
+      });
+    } catch (err: any) {
+      console.error("Failed to update user status:", err);
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
 }
