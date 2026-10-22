@@ -240,30 +240,8 @@ export const sendResetPasswordCodeEmail = async (
 
 
 export const sendPostCreatedEmail = async (email: string, item: any) => {
-  if (!email) return;
-  const fromAddress = process.env.EMAIL_FROM || "no-reply@giftpose.com";
-  try {
-    await resend.emails.send({
-      from: fromAddress,
-      to: email,
-      subject: "Your item is live on GiftPose 🎉",
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e7eb;">
-          <h2 style="color: #111827; margin-bottom: 8px;">Your item is now live! 🎉</h2>
-          <p style="color: #4b5563; font-size: 14px; line-height: 1.6;">Your gift listing has been published and nearby community members can now view and request it.</p>
-          <div style="background: #f9fafb; border-radius: 12px; padding: 16px; margin: 16px 0; border: 1px solid #f3f4f6;">
-            <p style="margin: 0 0 6px; font-weight: 600; color: #111827; font-size: 16px;">${item?.name || "Gift Item"}</p>
-            <p style="margin: 0 0 8px; color: #6b7280; font-size: 13.5px;">${item?.description || ""}</p>
-            <p style="margin: 0; color: #24B550; font-size: 12px; font-weight: 600;">Status: ${item?.status || "Live"} &bull; ${item?.pickup || "Pickup"}</p>
-          </div>
-          <p style="color: #9ca3af; font-size: 12px; margin-top: 16px;">Thank you for sharing with the GiftPose community.</p>
-        </div>
-      `,
-    });
-    console.log("📧 Post created email sent to:", email);
-  } catch (err: any) {
-    console.error("❌ Failed to send post created email:", err?.message || err);
-  }
+  // Email notifications for post creation disabled per configuration
+  return;
 };
 
 export const sendPostRequestEmail = async (
@@ -271,34 +249,8 @@ export const sendPostRequestEmail = async (
   item: any,
   requestMessage?: string
 ) => {
-  if (!email) return;
-  const fromAddress = process.env.EMAIL_FROM || "no-reply@giftpose.com";
-  try {
-    await resend.emails.send({
-      from: fromAddress,
-      to: email,
-      subject: `New interest in "${item?.name || "your item"}" 🔍`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e7eb;">
-          <h2 style="color: #111827; margin-bottom: 8px;">Someone requested your item! 🔍</h2>
-          <p style="color: #4b5563; font-size: 14px; line-height: 1.6;">A community member has indicated interest in receiving your listed item:</p>
-          <div style="background: #f9fafb; border-radius: 12px; padding: 16px; margin: 16px 0; border: 1px solid #f3f4f6;">
-            <p style="margin: 0 0 6px; font-weight: 600; color: #111827; font-size: 16px;">${item?.name || "Gift Item"}</p>
-            <p style="margin: 0 0 8px; color: #6b7280; font-size: 13.5px;">${item?.description || ""}</p>
-            ${
-              requestMessage
-                ? `<p style="margin: 8px 0 0; padding-top: 8px; border-top: 1px solid #e5e7eb; color: #374151; font-size: 13px;"><strong>Message:</strong> "${requestMessage}"</p>`
-                : ""
-            }
-          </div>
-          <p style="color: #9ca3af; font-size: 12px; margin-top: 16px;">Open the GiftPose app to view and manage your requests.</p>
-        </div>
-      `,
-    });
-    console.log("📧 Post request email sent to:", email);
-  } catch (err: any) {
-    console.error("❌ Failed to send post request email:", err?.message || err);
-  }
+  // Email notifications for post requests disabled per configuration
+  return;
 };
 
 export const sendNewItemAlertEmail = async (
@@ -306,34 +258,8 @@ export const sendNewItemAlertEmail = async (
   item: any,
   distanceInMiles?: number
 ) => {
-  if (!email) return;
-  const fromAddress = process.env.EMAIL_FROM || "no-reply@giftpose.com";
-  const distanceLabel =
-    typeof distanceInMiles === "number" && distanceInMiles > 0
-      ? `${distanceInMiles.toFixed(1)} miles away`
-      : "Near your location";
-  try {
-    await resend.emails.send({
-      from: fromAddress,
-      to: email,
-      subject: `Gift Alert: ${item?.name || "New Item"} near you 📍`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e7eb;">
-          <h2 style="color: #111827; margin-bottom: 8px;">New Gift Alert Near You 📍</h2>
-          <p style="color: #4b5563; font-size: 14px; line-height: 1.6;">An item matching your saved alerts was just posted:</p>
-          <div style="background: #f9fafb; border-radius: 12px; padding: 16px; margin: 16px 0; border: 1px solid #f3f4f6;">
-            <p style="margin: 0 0 6px; font-weight: 600; color: #111827; font-size: 16px;">${item?.name || "Gift Item"}</p>
-            <p style="margin: 0 0 8px; color: #6b7280; font-size: 13.5px;">${item?.description || ""}</p>
-            <p style="margin: 0; color: #24B550; font-size: 12px; font-weight: 600;">📍 ${distanceLabel} &bull; ${item?.pickup || "Pickup"}</p>
-          </div>
-          <p style="color: #9ca3af; font-size: 12px; margin-top: 16px;">Open the GiftPose app to claim or express interest in this item.</p>
-        </div>
-      `,
-    });
-    console.log("📧 New item alert email sent to:", email);
-  } catch (err: any) {
-    console.error("❌ Failed to send new item alert email:", err?.message || err);
-  }
+  // Email notifications for item alerts disabled per configuration
+  return;
 };
 
 export const sendNewReviewEmail = async (
@@ -342,30 +268,8 @@ export const sendNewReviewEmail = async (
   rating: number,
   comment: string
 ) => {
-  if (!email) return;
-  const fromAddress = process.env.EMAIL_FROM || "no-reply@giftpose.com";
-  const stars = "★".repeat(Math.max(1, Math.min(5, Math.round(rating))));
-  try {
-    await resend.emails.send({
-      from: fromAddress,
-      to: email,
-      subject: `New ${rating}-star review from ${reviewerName} ⭐`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e7eb;">
-          <h2 style="color: #111827; margin-bottom: 8px;">You received a new review! ⭐</h2>
-          <p style="color: #4b5563; font-size: 14px; line-height: 1.6;"><strong>${reviewerName}</strong> left you a review on GiftPose:</p>
-          <div style="background: #f9fafb; border-radius: 12px; padding: 16px; margin: 16px 0; border: 1px solid #f3f4f6;">
-            <p style="margin: 0 0 6px; font-size: 18px; color: #F59E0B; letter-spacing: 2px;">${stars}</p>
-            <p style="margin: 0; color: #374151; font-size: 14px; line-height: 1.5;">"${comment}"</p>
-          </div>
-          <p style="color: #9ca3af; font-size: 12px; margin-top: 16px;">Open your Profile in the GiftPose app to see all your reviews.</p>
-        </div>
-      `,
-    });
-    console.log("📧 New review email sent to:", email);
-  } catch (err: any) {
-    console.error("❌ Failed to send new review email:", err?.message || err);
-  }
+  // Email notifications for reviews disabled per configuration
+  return;
 };
 
 export interface StripeDebugEmailParams {

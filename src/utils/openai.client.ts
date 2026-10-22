@@ -52,16 +52,43 @@ ${JSON.stringify(taxonomy)}
             });
         }
 
-        const response = await this.withRetry(() =>
-            client.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages: [{ role: "user", content }],
-                temperature: 0.1,
-            })
-        );
+        try {
+            const response = await this.withRetry(() =>
+                client.chat.completions.create({
+                    model: "gpt-4o-mini",
+                    messages: [{ role: "user", content }],
+                    temperature: 0.1,
+                })
+            );
 
-        const text = response.choices[0]?.message?.content || "";
-        return this.parseAiJson(text);
+            const text = response.choices[0]?.message?.content || "";
+            return this.parseAiJson(text);
+        } catch (openAiErr: any) {
+            if (process.env.DEEPSEEK_API_KEY) {
+                try {
+                    const dsRes = await axios.post(
+                        "https://api.deepseek.com/v1/chat/completions",
+                        {
+                            model: "deepseek-flash",
+                            messages: [{ role: "user", content }],
+                            temperature: 0.1,
+                        },
+                        {
+                            headers: {
+                                Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+                                "Content-Type": "application/json",
+                            },
+                            timeout: 25000,
+                        }
+                    );
+                    const dsText = dsRes.data?.choices?.[0]?.message?.content || "";
+                    return this.parseAiJson(dsText);
+                } catch (dsErr: any) {
+                    console.error("DeepSeek fallback in categoriseItem failed:", dsErr?.response?.data || dsErr?.message);
+                }
+            }
+            throw openAiErr;
+        }
     }
 
 
@@ -69,29 +96,17 @@ ${JSON.stringify(taxonomy)}
         item: { title: string; description: string; image?: string; images?: string[]; },
         taxonomy: any
     ) {
+        const prompt = `
+You are an intelligent product analysis and categorisation AI for a community gifting & donation app (GiftPose).
 
+Your task is to carefully inspect the uploaded image(s) (and any optional title/description) and:
 
-        try {
-
-            const prompt = `
-You are an intelligent product analysis and categorisation AI.
-
-Your task is to analyse the provided item (title, description, and images) and:
-
-1. Generate a clear, concise, and realistic product title
-2. Generate a helpful, human-friendly product description
+1. Identify the exact item shown in the image(s) and generate a clear, concise, realistic product title (e.g. "Silver MacBook Pro Laptop", "Wooden Dining Chair", "Nike Running Trainers", "Ceramic Coffee Mug").
+2. Generate a helpful, natural 1–3 sentence product description suitable for a giveaway/donation listing, describing what the item is, its visible features/colour/style, and apparent condition.
 3. Classify the item into:
-   - category
-   - subcategory
-   - content
-
-You MUST follow these rules:
-
-- Use the provided taxonomy strictly when possible
-- Match the closest possible category, subcategory, and content
-- If no suitable match exists, leave category/subcategory/content empty and suggest new ones
-- Be consistent and realistic (like a marketplace listing)
-- Do NOT hallucinate unrelated categories
+   - category (must match one of the provided taxonomy category names when possible)
+   - subcategory (must match one of the subcategories under that category when possible)
+   - content (specific item type name, e.g. "Laptops", "Chairs", "Sneakers", "Mugs")
 
 ---
 
@@ -111,21 +126,15 @@ OUTPUT FORMAT (STRICT JSON ONLY — NO TEXT OUTSIDE JSON):
 ---
 
 FIELD RULES:
-
-- title → short, clear (e.g. "Wooden Dining Chair")
-- description → 1–3 sentences, helpful, natural
-- category → must match taxonomy exactly (if found)
-- subcategory → must match taxonomy exactly (if found)
-- content → must match taxonomy exactly (if found)
-
-If no match:
-- Leave category/subcategory/content as empty string ""
-- Fill suggestedCategory / suggestedSubcategory / suggestedContent
+- title → short, accurate, specific to the image (2–6 words)
+- description → 1–3 natural sentences describing the item in the photo
+- category → exact category name from TAXONOMY (or empty string "" if none fits, and fill suggestedCategory)
+- subcategory → exact subcategory name from TAXONOMY under the chosen category (or fill suggestedSubcategory)
+- content → specific item type (or fill suggestedContent)
 
 ---
 
 ITEM DATA:
-
 Title: ${item.title || "Not provided"}
 Description: ${item.description || "Not provided"}
 
@@ -137,76 +146,100 @@ ${JSON.stringify(taxonomy)}
 ---
 
 IMPORTANT:
-- Base your answer primarily on the images if text is missing
-- Prefer visual understanding over weak text input
+- Base your answer on the visual content of the image(s)
 - Return ONLY valid JSON (no markdown, no explanation)
 `;
 
-
-
-            // ✅ Build message content
-            const messageContent: any[] = [
-                {
-                    type: "text",
-                    text: prompt
-                }
-            ];
-
-            // ✅ Add multiple images if provided
-            if (item.images && item.images.length > 0) {
-                item.images.forEach((url) => {
-                    messageContent.push({
-                        type: "image_url",
-                        image_url: {
-                            url
-                        }
-                    });
-                });
+        const messageContent: any[] = [
+            {
+                type: "text",
+                text: prompt
             }
-            // ✅ Fallback to single image
-            else if (item.image) {
+        ];
+
+        if (item.images && item.images.length > 0) {
+            item.images.forEach((url) => {
                 messageContent.push({
                     type: "image_url",
-                    image_url: {
-                        url: item.image
-                    }
+                    image_url: { url }
                 });
-            }
-
-            // 🚨 IMPORTANT: image URLs must be PUBLIC (not localhost)
-
-            const response = await axios.post(
-                "https://api.openai.com/v1/chat/completions",
-                {
-                    model: "gpt-4o",
-                    messages: [
-                        {
-                            role: "user",
-                            content: messageContent
-                        }
-                    ],
-                    temperature: 0.2
-                },
-                {
-                    headers: {
-                        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                        "Content-Type": "application/json"
-                    }
-                }
-            );
-
-            const text = response.data.choices[0].message.content;
-            return this.parseAiJson(text);
-
-        } catch (err: any) {
-            console.error(
-                "❌ OpenAI Error:",
-                err.response?.data || err.message
-            );
-            throw new Error("AI categorisation failed");
+            });
+        } else if (item.image) {
+            messageContent.push({
+                type: "image_url",
+                image_url: { url: item.image }
+            });
         }
 
+        // 1. Try OpenAI first if key is configured
+        if (process.env.OPENAI_API_KEY) {
+            try {
+                const response = await axios.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    {
+                        model: "gpt-4o-mini",
+                        messages: [
+                            {
+                                role: "user",
+                                content: messageContent
+                            }
+                        ],
+                        temperature: 0.2
+                    },
+                    {
+                        headers: {
+                            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                            "Content-Type": "application/json"
+                        },
+                        timeout: 20000
+                    }
+                );
 
+                const text = response.data.choices[0].message.content;
+                return this.parseAiJson(text);
+            } catch (openAiErr: any) {
+                console.warn(
+                    "⚠️ OpenAI Vision unavailable, falling back to DeepSeek Vision:",
+                    openAiErr?.response?.data?.error?.message || openAiErr?.message
+                );
+            }
+        }
+
+        // 2. Fallback to DeepSeek Vision (deepseek-flash supports text + image input)
+        if (process.env.DEEPSEEK_API_KEY) {
+            try {
+                const dsResponse = await axios.post(
+                    "https://api.deepseek.com/v1/chat/completions",
+                    {
+                        model: "deepseek-flash",
+                        messages: [
+                            {
+                                role: "user",
+                                content: messageContent
+                            }
+                        ],
+                        temperature: 0.2
+                    },
+                    {
+                        headers: {
+                            Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+                            "Content-Type": "application/json"
+                        },
+                        timeout: 25000
+                    }
+                );
+
+                const text = dsResponse.data?.choices?.[0]?.message?.content || "";
+                return this.parseAiJson(text);
+            } catch (dsErr: any) {
+                console.error(
+                    "❌ DeepSeek Vision Error:",
+                    dsErr?.response?.data || dsErr?.message
+                );
+            }
+        }
+
+        throw new Error("AI categorisation failed");
     }
 
 

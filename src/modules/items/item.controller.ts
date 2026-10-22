@@ -23,7 +23,15 @@ export const createItem = async (req: Request, res: Response) => {
 export const analyseImage = async (req: AuthRequest, res: Response) => {
 
     try {
-        const files = req.files as Express.Multer.File[];
+        const rawFiles = req.files as Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] } | undefined;
+        let files: Express.Multer.File[] = [];
+        if (Array.isArray(rawFiles)) {
+            files = rawFiles;
+        } else if (rawFiles && typeof rawFiles === 'object') {
+            files = Object.values(rawFiles).flat();
+        } else if (req.file) {
+            files = [req.file];
+        }
 
         if (!files || files.length === 0) {
             return res.status(400).json({
@@ -57,8 +65,17 @@ export const postItem = async (req: AuthRequest, res: Response) => {
             });
         }
 
+        const rawFiles = req.files as Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] } | undefined;
+        let files: Express.Multer.File[] = [];
+        if (Array.isArray(rawFiles)) {
+            files = rawFiles;
+        } else if (rawFiles && typeof rawFiles === 'object') {
+            files = Object.values(rawFiles).flat();
+        } else if (req.file) {
+            files = [req.file];
+        }
 
-        const item = await itemService.postItem(req.body, req.file, user);
+        const item = await itemService.postItem(req.body, files, user);
 
         return res.status(201).json({
             status: true,

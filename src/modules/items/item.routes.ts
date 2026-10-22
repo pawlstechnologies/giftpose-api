@@ -37,11 +37,11 @@ router.patch('/hide/:itemId', hideItem);
 router.get('/report-options', getReportOptions);
 router.post('/report/:itemId', reportItem);
 
-///authenticated routes
-router.post('/analyse-image', protect, upload.array('images', 5), analyseImage); //global route for image analysis, can be used in item creation or editing, or even as a standalone feature for users to analyze images before posting.
-router.post('/post', protect, postItem);
-router.post('/post-request', protect, postItemRequest);
-router.get('/pickup-options', protect, pickupOptions);
+///authenticated & item creation routes
+router.post('/analyse-image', upload.any(), analyseImage); // global route for image analysis
+router.post('/post', protect, upload.any(), postItem);
+router.post('/post-request', protect, upload.any(), postItemRequest);
+router.get('/pickup-options', pickupOptions);
 router.patch('/update/:itemId', protect, updateItem);
 router.delete('/:itemId', protect, deleteItem);
 

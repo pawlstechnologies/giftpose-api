@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import axios from 'axios';
+import fs from 'fs';
 import ItemModel from './item.model';
 import { ItemInterface } from './item.types';
 import ApiError from '../../utils/ApiError';
@@ -46,192 +47,246 @@ export default class ItemService {
 
     }
 
+    private escapeRegex(text: string) {
+        return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
     async analyseImage(files: Express.Multer.File[]) {
 
         if (!files || files.length === 0) {
             throw new ApiError(413, 'Images are required, upload atleast one image');
         }
 
-        // 🔥 1. Upload all images to Cloudinary
-        const imageUrls: string[] = [];
+        // Convert files to base64 data URLs for instant AI vision analysis
+        const dataUrls: string[] = [];
         for (const file of files) {
-            const url = await uploadToCloudinary(file.path);
-            imageUrls.push(url);
+            try {
+                const buf = fs.readFileSync(file.path);
+                const mime = file.mimetype || 'image/jpeg';
+                dataUrls.push(`data:${mime};base64,${buf.toString('base64')}`);
+            } catch (readErr) {
+                console.warn('Could not read file for base64 vision:', readErr);
+            }
         }
 
-        const taxonomy = await this.getTaxonomy();
+        // Upload to Cloudinary in parallel with AI analysis
+        const cloudinaryPromise = Promise.all(
+            files.map(async (file) => {
+                try {
+                    return await uploadToCloudinary(file.path);
+                } catch (uploadErr) {
+                    console.warn('Cloudinary upload error:', uploadErr);
+                    return '';
+                }
+            })
+        );
 
-        // 🔥 Combine images into one AI request
-        const ai = await OpenAIClient.imageCategorisatiion(
+        const [categories, subcategories] = await Promise.all([
+            CategoryModel.find({ status: { $ne: 'Deleted' } }, { name: 1, status: 1 }).lean(),
+            SubCategoryModel.find({ status: { $ne: 'Deleted' } }, { name: 1, categoryId: 1, status: 1 }).lean(),
+        ]);
+
+        const activeCategories = categories.filter((c: any) => c.status === 'Active' || c.name !== 'Uncategorised');
+        const compactTaxonomy = activeCategories.map((cat: any) => ({
+            category: cat.name,
+            subcategories: subcategories
+                .filter((sub: any) => String(sub.categoryId) === String(cat._id))
+                .map((sub: any) => sub.name),
+        }));
+
+        const aiPromise = OpenAIClient.imageCategorisatiion(
             {
                 title: "",
                 description: "",
-                images: imageUrls
+                images: dataUrls
             },
-            taxonomy //await this.getTaxonomy()
+            compactTaxonomy
         );
-        // 🔹 Map AI outputs to DB IDs (if they exist)
-        let category = await CategoryModel.findOne({ name: ai.category });
-        let subcategory = await SubCategoryModel.findOne({ name: ai.subcategory });
-        let content = await ContentModel.findOne({ name: ai.content });
 
+        const [uploadedUrls, ai] = await Promise.all([cloudinaryPromise, aiPromise]);
+        const imageUrls = uploadedUrls.filter(Boolean);
 
-        // 🔥 HANDLE SUGGESTED CATEGORY
-        let suggestedCategoryDoc = null;
-        if (!category && ai.suggestedCategory) {
-            suggestedCategoryDoc = await CategoryModel.findOne({ name: ai.suggestedCategory.trim() });
+        const rawCatName = (ai.category || ai.suggestedCategory || '').trim();
+        const rawSubName = (ai.subcategory || ai.suggestedSubcategory || '').trim();
+        const rawContentName = (ai.content || ai.suggestedContent || ai.title || '').trim();
+
+        // 1. Resolve Category (case-insensitive exact match, then word match, then create/fallback)
+        let category: any = null;
+        if (rawCatName) {
+            category = await CategoryModel.findOne({
+                name: { $regex: new RegExp(`^${this.escapeRegex(rawCatName)}$`, 'i') }
+            });
+            if (!category) {
+                const words = rawCatName.split(/\W+/).filter((w: string) => w.length >= 3);
+                for (const w of words) {
+                    category = await CategoryModel.findOne({
+                        status: 'Active',
+                        name: { $regex: new RegExp(this.escapeRegex(w), 'i') }
+                    });
+                    if (category) break;
+                }
+            }
+        }
+
+        // Also check if content or subcategory matches an existing Content/SubCategory to infer Category
+        if (!category && (rawSubName || rawContentName)) {
+            const subHit = rawSubName
+                ? await SubCategoryModel.findOne({
+                    name: { $regex: new RegExp(this.escapeRegex(rawSubName), 'i') }
+                })
+                : null;
+            if (subHit) {
+                category = await CategoryModel.findById(subHit.categoryId);
+            }
+        }
+
+        let suggestedCategoryDoc: any = null;
+        if (!category && rawCatName) {
+            suggestedCategoryDoc = await CategoryModel.findOne({
+                name: { $regex: new RegExp(`^${this.escapeRegex(rawCatName)}$`, 'i') }
+            });
             if (!suggestedCategoryDoc) {
-                suggestedCategoryDoc = new CategoryModel({ name: ai.suggestedCategory.trim() });
-                await suggestedCategoryDoc.save(); // ✅ triggers pre-save slug
+                suggestedCategoryDoc = new CategoryModel({ name: rawCatName, status: 'Active' });
+                await suggestedCategoryDoc.save();
             }
+            category = suggestedCategoryDoc;
+        }
+        if (!category) {
+            category = await CategoryModel.findOne({ status: 'Active' }) || await CategoryModel.findOne();
         }
 
-
-        // 🔹 Suggested SubCategory
-        let suggestedSubcategoryDoc = null;
-        if (!subcategory && ai.suggestedSubcategory && suggestedCategoryDoc) {
-            suggestedSubcategoryDoc = await SubCategoryModel.findOne({
-                name: ai.suggestedSubcategory.trim(),
-                categoryId: suggestedCategoryDoc._id
+        // 2. Resolve SubCategory under resolved Category
+        let subcategory: any = null;
+        if (category && rawSubName) {
+            subcategory = await SubCategoryModel.findOne({
+                categoryId: category._id,
+                name: { $regex: new RegExp(`^${this.escapeRegex(rawSubName)}$`, 'i') }
             });
-
-            if (!suggestedSubcategoryDoc) {
-                suggestedSubcategoryDoc = new SubCategoryModel({
-                    name: ai.suggestedSubcategory.trim(),
-                    categoryId: suggestedCategoryDoc._id
-                });
-                await suggestedSubcategoryDoc.save(); // ✅ triggers slug
+            if (!subcategory) {
+                const subWords = rawSubName.split(/\W+/).filter((w: string) => w.length >= 3);
+                for (const w of subWords) {
+                    subcategory = await SubCategoryModel.findOne({
+                        categoryId: category._id,
+                        name: { $regex: new RegExp(this.escapeRegex(w), 'i') }
+                    });
+                    if (subcategory) break;
+                }
             }
         }
 
-        // 🔹 Suggested Content
-        let suggestedContentDoc = null;
-        if (!content && ai.suggestedContent && suggestedSubcategoryDoc) {
-            suggestedContentDoc = await ContentModel.findOne({
-                name: ai.suggestedContent.trim(),
-                subcategoryId: suggestedSubcategoryDoc._id
-            });
+        // Check if a Content item under this Category matches rawContentName or rawSubName
+        let content: any = null;
+        if (category) {
+            const catSubIds = subcategories
+                .filter((s: any) => String(s.categoryId) === String(category._id))
+                .map((s: any) => s._id);
 
-            if (!suggestedContentDoc) {
-                suggestedContentDoc = new ContentModel({
-                    name: ai.suggestedContent.trim(),
-                    subcategoryId: suggestedSubcategoryDoc._id
+            if (rawContentName && catSubIds.length > 0) {
+                content = await ContentModel.findOne({
+                    subcategoryId: { $in: catSubIds },
+                    name: { $regex: new RegExp(`^${this.escapeRegex(rawContentName)}$`, 'i') }
                 });
-                await suggestedContentDoc.save(); // ✅ triggers slug
+                if (!content) {
+                    const contentWords = rawContentName.split(/\W+/).filter((w: string) => w.length >= 3);
+                    for (const w of contentWords) {
+                        content = await ContentModel.findOne({
+                            subcategoryId: { $in: catSubIds },
+                            name: { $regex: new RegExp(this.escapeRegex(w), 'i') }
+                        });
+                        if (content) break;
+                    }
+                }
+                if (content && !subcategory) {
+                    subcategory = await SubCategoryModel.findById(content.subcategoryId);
+                }
             }
         }
+
+        let suggestedSubcategoryDoc: any = null;
+        if (!subcategory && category) {
+            if (rawSubName) {
+                suggestedSubcategoryDoc = await SubCategoryModel.findOne({
+                    name: { $regex: new RegExp(`^${this.escapeRegex(rawSubName)}$`, 'i') },
+                    categoryId: category._id
+                });
+                if (!suggestedSubcategoryDoc) {
+                    suggestedSubcategoryDoc = new SubCategoryModel({
+                        name: rawSubName,
+                        categoryId: category._id,
+                        status: 'Active'
+                    });
+                    await suggestedSubcategoryDoc.save();
+                }
+                subcategory = suggestedSubcategoryDoc;
+            } else {
+                subcategory = await SubCategoryModel.findOne({ categoryId: category._id });
+            }
+        }
+
+        // 3. Resolve Content under resolved SubCategory
+        let suggestedContentDoc: any = null;
+        if (!content && subcategory) {
+            if (rawContentName) {
+                content = await ContentModel.findOne({
+                    subcategoryId: subcategory._id,
+                    name: { $regex: new RegExp(`^${this.escapeRegex(rawContentName)}$`, 'i') }
+                });
+                if (!content) {
+                    suggestedContentDoc = new ContentModel({
+                        name: rawContentName,
+                        subcategoryId: subcategory._id,
+                        status: 'Active'
+                    });
+                    await suggestedContentDoc.save();
+                    content = suggestedContentDoc;
+                }
+            } else {
+                content = await ContentModel.findOne({ subcategoryId: subcategory._id });
+            }
+        }
+
+        const builtCategory = category
+            ? {
+                _id: category._id,
+                name: category.name,
+                slug: category.slug || '',
+                status: category.status || 'Active',
+                subcategories: subcategory
+                    ? [
+                        {
+                            _id: subcategory._id,
+                            name: subcategory.name,
+                            categoryId: subcategory.categoryId,
+                            status: subcategory.status || 'Active',
+                            slug: subcategory.slug || '',
+                            contents: content
+                                ? [
+                                    {
+                                        _id: content._id,
+                                        name: content.name,
+                                        status: content.status || 'Active',
+                                        subcategoryId: content.subcategoryId,
+                                        slug: content.slug || ''
+                                    }
+                                ]
+                                : []
+                        }
+                    ]
+                    : []
+            }
+            : null;
 
         return {
-            name: ai.title || ai.content || "Generated Item",
-            description: ai.description || ai.content,
-
-            category: category
-                ? {
-                    _id: category._id,
-                    name: category.name,
-                    slug: category.slug,
-                    status: category.status,
-
-                    subcategories: subcategory
-                        ? [
-                            {
-                                _id: subcategory._id,
-                                name: subcategory.name,
-                                categoryId: subcategory.categoryId,
-                                status: subcategory.status,
-                                slug: subcategory.slug,
-
-                                contents: content
-                                    ? [
-                                        {
-                                            _id: content._id,
-                                            name: content.name,
-                                            status: content.status,
-                                            subcategoryId: content.subcategoryId,
-                                            slug: content.slug
-                                        }
-                                    ]
-                                    : []
-                            }
-                        ]
-                        : []
-                }
-                : null,
-
-            // 🔥 Suggested (same structure)
-            suggestedCategory: suggestedCategoryDoc
-                ? {
-                    _id: suggestedCategoryDoc._id,
-                    name: suggestedCategoryDoc.name,
-                    slug: suggestedCategoryDoc.slug,
-                    status: suggestedCategoryDoc.status,
-
-                    subcategories: suggestedSubcategoryDoc
-                        ? [
-                            {
-                                _id: suggestedSubcategoryDoc._id,
-                                name: suggestedSubcategoryDoc.name,
-                                categoryId: suggestedSubcategoryDoc.categoryId,
-                                status: suggestedSubcategoryDoc.status,
-                                slug: suggestedSubcategoryDoc.slug,
-
-                                contents: suggestedContentDoc
-                                    ? [
-                                        {
-                                            _id: suggestedContentDoc._id,
-                                            name: suggestedContentDoc.name,
-                                            status: suggestedContentDoc.status,
-                                            subcategoryId: suggestedContentDoc.subcategoryId,
-                                            slug: suggestedContentDoc.slug
-                                        }
-                                    ]
-                                    : []
-                            }
-                        ]
-                        : []
-                }
-                : null,
-
+            name: ai.title || ai.content || "Gift Item",
+            description: ai.description || ai.content || "",
+            category: builtCategory,
+            suggestedCategory: suggestedCategoryDoc ? builtCategory : null,
             images: imageUrls
         };
-
-
-
-        // return {
-        //     name: ai.title || ai.content || "Generated Item",
-        //     description: ai.description || ai.content,
-
-        //     category: ai.category || "",
-        //     categoryId: category?._id || null,
-
-        //     subcategory: ai.subcategory || "",
-        //     subcategoryId: subcategory?._id || null,
-
-        //     content: ai.content || "",
-        //     contentId: content?._id || null,
-
-
-        //     // suggestedCategory: ai.suggestedCategory || "",
-        //     // suggestedSubcategory: ai.suggestedSubcategory || "",
-        //     // suggestedContent: ai.suggestedContent || "",
-
-
-        //     suggestedCategory: ai.suggestedCategory || "",
-        //     suggestedCategoryId: suggestedCategoryDoc?._id || null,
-
-        //     suggestedSubcategory: ai.suggestedSubcategory || "",
-        //     suggestedSubcategoryId: suggestedSubcategoryDoc?._id || null,
-
-        //     suggestedContent: ai.suggestedContent || "",
-        //     suggestedContentId: suggestedContentDoc?._id || null,
-
-        //     images: imageUrls
-        // };
-
     }
 
 
-    async postItem(data: any, file: any, user: any) {
+    async postItem(data: any, filesOrFile: any, user: any) {
 
         let {
             name,
@@ -244,12 +299,44 @@ export default class ItemService {
             suggestedContentId,
             imageUrls = [],
             postCode,
+            city: inputCity,
+            lat: inputLat,
+            lng: inputLng,
             country = 'United Kingdom',
             pickup = 'Pickup'
         } = data;
 
-        if (file && file.path) {
-            imageUrls.push(file.path);
+        // Normalize imageUrls if sent via multipart FormData
+        if (typeof imageUrls === 'string') {
+            try {
+                const parsed = JSON.parse(imageUrls);
+                imageUrls = Array.isArray(parsed) ? parsed : [imageUrls];
+            } catch {
+                imageUrls = imageUrls.trim() ? [imageUrls.trim()] : [];
+            }
+        } else if (!Array.isArray(imageUrls)) {
+            imageUrls = [];
+        }
+        imageUrls = imageUrls.filter((u: any) => typeof u === 'string' && u.startsWith('http'));
+
+        // If no Cloudinary URLs were provided yet, upload any attached files to Cloudinary
+        const files: Express.Multer.File[] = Array.isArray(filesOrFile)
+            ? filesOrFile
+            : filesOrFile
+                ? [filesOrFile]
+                : [];
+
+        if (imageUrls.length === 0 && files.length > 0) {
+            for (const f of files) {
+                if (f && f.path) {
+                    try {
+                        const uploaded = await uploadToCloudinary(f.path);
+                        if (uploaded) imageUrls.push(uploaded);
+                    } catch (err) {
+                        console.warn('postItem Cloudinary upload failed:', err);
+                    }
+                }
+            }
         }
 
         let finalCategoryId = categoryId || suggestedCategoryId;
@@ -258,7 +345,7 @@ export default class ItemService {
 
         // Auto-resolve category if missing or invalid
         if (!finalCategoryId || !mongoose.Types.ObjectId.isValid(finalCategoryId)) {
-            const cat = await CategoryModel.findOne();
+            const cat = await CategoryModel.findOne({ status: 'Active' }) || await CategoryModel.findOne();
             if (cat) finalCategoryId = cat._id;
         }
 
@@ -282,10 +369,18 @@ export default class ItemService {
             }
         }
 
-        let city = '';
+        let city = inputCity || '';
         let coordinates = [0, 0];
 
-        // Resolve location
+        if (inputLat !== undefined && inputLng !== undefined) {
+            const parsedLat = Number(inputLat);
+            const parsedLng = Number(inputLng);
+            if (Number.isFinite(parsedLat) && Number.isFinite(parsedLng) && (parsedLat !== 0 || parsedLng !== 0)) {
+                coordinates = [parsedLng, parsedLat];
+            }
+        }
+
+        // Resolve user's default registered location
         let userLocation: any = null;
         if (user?._id) {
             userLocation = await LocationModel.findOne({ user: user._id });
@@ -294,15 +389,15 @@ export default class ItemService {
             userLocation = await LocationModel.findOne({ deviceId: user.deviceId });
         }
 
-        if (!postCode && userLocation?.postcode) {
-            postCode = userLocation.postcode;
+        if (!postCode && userLocation?.postCode) {
+            postCode = userLocation.postCode;
         }
         if (!postCode) {
             postCode = 'SW1A 1AA';
         }
 
         const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-        if (apiKey && postCode) {
+        if (apiKey && postCode && coordinates[0] === 0 && coordinates[1] === 0) {
             try {
                 const response = await axios.get(
                     'https://maps.googleapis.com/maps/api/geocode/json',
@@ -317,7 +412,7 @@ export default class ItemService {
                     const cityComponent = result.address_components.find((comp: any) =>
                         comp.types.includes('locality') || comp.types.includes('postal_town')
                     );
-                    city = cityComponent?.long_name || '';
+                    city = cityComponent?.long_name || city;
                 }
             } catch (err) {
                 console.warn('Geocoding in postItem failed:', err);
@@ -325,14 +420,16 @@ export default class ItemService {
         }
 
         if (coordinates[0] === 0 && coordinates[1] === 0 && userLocation) {
-            coordinates = [userLocation.longitude || 0, userLocation.latitude || 0];
-            city = userLocation.city || city || 'London';
+            const uLng = userLocation.lng ?? userLocation.location?.coordinates?.[0] ?? 0;
+            const uLat = userLocation.lat ?? userLocation.location?.coordinates?.[1] ?? 0;
+            coordinates = [uLng, uLat];
+            city = city || userLocation.city || 'London';
         }
         if (!city && userLocation?.city) {
             city = userLocation.city;
         }
         if (!city) {
-            city = country || 'United Kingdom';
+            city = postCode || country || 'United Kingdom';
         }
 
         // 🔥 3. Create item
